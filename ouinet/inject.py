@@ -59,12 +59,13 @@ def inject_dir(input_dir, output_dir):
             uri_hash = uri_hash_from_path(fp)
             if not uri_hash:
                 continue  # not a URI file
-            descp = desc_path_from_uri_hash(uri_hash, output_dir)
-            if os.path.exists(descp):
-                continue  # a descriptor for the URI already exists
             http_rphp = os.path.splitext(fp)[0] + HTTP_RPH_FILE_EXT
             if not os.path.exists(http_rphp):
                 continue  # only handle HTTP insertion for the moment
+
+            descp = desc_path_from_uri_hash(uri_hash, output_dir)
+            if os.path.exists(descp):
+                continue  # a descriptor for the URI already exists
             print("TODO: handle URI file:", fp)  # XXXX
 
 def main():
