@@ -33,6 +33,22 @@ def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, DATA_DIR_NAME, uri_hash + DESC_FILE_EXT)
 
 def inject_dir(input_dir, output_dir):
+    """Sign content from `input_dir`, put insertion data in `output_dir`.
+
+    Limitations:
+
+    - Only a single injection per URI is supported.
+    - Only injection of HTTP exchanges is supported.
+
+    For each injection to be performed for a given URI, with ``URI_HASH``
+    being the hexadecimal, lower-case SHA1 hash of the URI, in `input_dir`
+    there must exist:
+
+    - ``URI_HASH[:2]/URI_HASH[2:].uri`` with the URI itself
+    - ``URI_HASH[:2]/URI_HASH[2:].http-rph`` with the head of the HTTP response
+    - ``URI_HASH[:2]/URI_HASH[2:].data`` with the body of the HTTP response
+      (after transfer decoding if a non-identity transfer encoding was used)
+    """
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
         for fn in filenames:
