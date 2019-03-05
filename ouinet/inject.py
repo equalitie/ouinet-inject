@@ -10,6 +10,7 @@ import sys
 
 DATA_DIR_NAME = '.ouinet'
 DESC_FILE_EXT = '.desc'
+HTTP_RPH_FILE_EXT = '.http-rph'
 
 
 _uri_hash_path_re = r'^.*/([0-9A-Fa-f]{2})/([0-9A-Fa-f]{38})\.uri$'.replace('/', os.path.sep)
@@ -42,6 +43,9 @@ def inject_dir(input_dir, output_dir):
             descp = desc_path_from_uri_hash(uri_hash, output_dir)
             if os.path.exists(descp):
                 continue  # a descriptor for the URI already exists
+            http_rphp = os.path.splitext(fp)[0] + HTTP_RPH_FILE_EXT
+            if not os.path.exists(http_rphp):
+                continue  # only handle HTTP insertion for the moment
             print("TODO: handle URI file:", fp)  # XXXX
 
 def main():
