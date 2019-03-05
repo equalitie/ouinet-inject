@@ -48,6 +48,9 @@ def inject_dir(input_dir, output_dir):
     - ``URI_HASH[:2]/URI_HASH[2:].http-rph`` with the head of the HTTP response
     - ``URI_HASH[:2]/URI_HASH[2:].data`` with the body of the HTTP response
       (after transfer decoding if a non-identity transfer encoding was used)
+
+    If a ``.ouinet/URI_HASH.desc`` file already exists in the `output_dir`,
+    the injection for that URI is skipped.
     """
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
