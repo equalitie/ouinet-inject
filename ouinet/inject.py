@@ -80,18 +80,18 @@ def inject_dir(input_dir, output_dir):
             http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
 
             if not os.path.exists(http_rphp):
-                _logger.warning("missing HTTP response head for URI hash: %s", uri_hash)
+                _logger.warning("skipping URI with missing HTTP response head: hash=%s", uri_hash)
                 continue  # only handle HTTP insertion for the moment
 
             descp = desc_path_from_uri_hash(uri_hash, output_dir)
             if os.path.exists(descp):
-                _logger.debug("skipping URI hash with existing descriptor: %s", uri_hash)
+                _logger.debug("skipping URI with existing descriptor: hash=%s", uri_hash)
                 continue  # a descriptor for the URI already exists
 
             with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
                 uri = urif.read()
                 if hashlib.sha1(uri).hexdigest() != uri_hash:
-                    _logger.error("URI hash does not match hash of URI file: %s", uri_hash)
+                    _logger.error("skipping URI with invalid hash: hash=%s", uri_hash)
                     continue
                 http_rph = http_rphf.read()
                 inject_uri(uri, datap, meta_http_rph=http_rph)
