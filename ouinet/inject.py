@@ -93,11 +93,11 @@ def inject_dir(input_dir, output_dir):
                 continue  # a descriptor for the URI already exists
 
             with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
-                uri = urif.read()
-                if hashlib.sha1(uri).hexdigest() != uri_hash:
+                uri = urif.read().decode()  # only ASCII, RFC 3986#1.2.1
+                if hashlib.sha1(uri.encode()).hexdigest() != uri_hash:
                     _logger.error("skipping URI with invalid hash: hash=%s", uri_hash)
                     continue
-                http_rph = http_rphf.read()
+                http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
                 inject_uri(uri, datap, meta_http_rph=http_rph)
 
 def main():
