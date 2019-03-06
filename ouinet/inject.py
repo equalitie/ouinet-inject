@@ -23,6 +23,7 @@ URI_FILE_EXT = '.uri'
 DATA_FILE_EXT = '.data'
 HTTP_RPH_FILE_EXT = '.http-rph'
 DESC_FILE_EXT = '.desc'
+INS_FILE_EXT_PFX = '.ins-'
 
 
 _logger = logging.getLogger('ouinet.inject')
@@ -223,11 +224,10 @@ def inject_dir(input_dir, output_dir):
             # TODO: handle exceptions
             with open(descp, 'wb') as descf:
                 descf.write(desc_data)
-            # TODO: save insertion data
-            #desc_prefix = os.path.splitext(descp)[0]
-            #for (idx, idx_inj_data) in inj_data.items():
-            #    with open(XXXX, 'wb') as injf:
-            #        injf.write(idx_inj_data)
+            desc_prefix = os.path.splitext(descp)[0]
+            for (idx, idx_inj_data) in inj_data.items():
+                with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
+                    injf.write(idx_inj_data)
             # TODO: copy data file
 
 def main():
