@@ -4,12 +4,15 @@
 
 import argparse
 import hashlib
+import io
 import logging
 import os
 import re
 import subprocess
 import uuid
 import sys
+
+from http.client import HTTPResponse
 
 
 DATA_DIR_NAME = '.ouinet'
@@ -41,17 +44,67 @@ def uri_hash_from_path(path):
 def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, DATA_DIR_NAME, uri_hash + DESC_FILE_EXT)
 
-def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
-    # TODO: Process HTTP response head.
+# From Ouinet's ``src/http_util.h:to_cache_response()``.
+# The order and format of the headers is respected in the output.
+# The alphabetical order has no particular reason.
+# The camel case format only makes the resulting head look more natural.
+_cache_http_response_headers = [
+    'Accept-Ranges',
+    'Access-Control-Allow-Credentials',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Methods',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Expose-Headers',
+    'Access-Control-Max-Age',
+    'Age',
+    'Cache-Control',
+    'Content-Encoding',
+    'Content-Language',
+    'Content-Length',
+    'Content-Type',
+    'Date',
+    'Etag',
+    'Expires',
+    'Last-Modified',
+    'Location',
+    'Retry-After',
+    'Server',
+    'Transfer-Encoding',
+    'Vary',
+    'Via',
+    'Warning',
+]
 
+def process_http_response(resp_str):
+    """Return a filtered version of `resp_str` as another response string."""
+
+    # Parse response head from string.
+    rpf = io.BytesIO(resp_str.encode('iso-8859-1'))  # RFC 7230#3.2.4
+    rpf.makefile = lambda *a, **k: rpf  # monkey-patch as a socket
+    rp = HTTPResponse(rpf)
+    rp.begin()
+
+    # Build a new response head string with selected headers.
+    v = int(rp.version)
+    version = 'HTTP/%d.%d' % (v // 10, v % 10)
+    out_rp_str = '%s %s %s\r\n' % (version, rp.status, rp.reason)
+    for hdrn in _cache_http_response_headers:
+        hdrv = rp.getheader(hdrn)  # concatenates repeated headers
+        if hdrv is not None:
+            out_rp_str += '%s: %s\r\n' % (hdrn, hdrv)
+    out_rp_str += '\r\n'
+    return out_rp_str
+
+def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
     # v0 descriptors only support HTTP exchanges,
     # with compulsory response head metadata,
     # and a single IPFS CID pointing to the body.
+    meta_http_rph = process_http_response(kwargs['meta_http_rph'])
     desc = {
         '!ouinet_version': 0,
         'url': canonical_uri,
         'id': str(uuid.uuid4()),
-        'head': kwargs['meta_http_rph'],
+        'head': meta_http_rph,
         'body_link': data_ipfs_cid,
     }
     return desc
