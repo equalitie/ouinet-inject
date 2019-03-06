@@ -18,7 +18,7 @@ import zlib
 from http.client import HTTPResponse
 
 
-DATA_DIR_NAME = '.ouinet'
+OUINET_DIR_NAME = '.ouinet'
 URI_FILE_EXT = '.uri'
 DATA_FILE_EXT = '.data'
 HTTP_RPH_FILE_EXT = '.http-rph'
@@ -50,7 +50,7 @@ def uri_hash_from_path(path):
     return ''.join(m.groups()).lower() if m else ''
 
 def desc_path_from_uri_hash(uri_hash, output_dir):
-    return os.path.join(output_dir, DATA_DIR_NAME, uri_hash + DESC_FILE_EXT)
+    return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash + DESC_FILE_EXT)
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
