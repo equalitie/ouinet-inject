@@ -79,6 +79,10 @@ def inject_dir(input_dir, output_dir):
             datap = uri_prefix + DATA_FILE_EXT
             http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
 
+            if not os.path.exists(datap):
+                _logger.warning("skipping URI with missing data file: hash=%s", uri_hash)
+                continue  # data file must exist even if empty
+
             if not os.path.exists(http_rphp):
                 _logger.warning("skipping URI with missing HTTP response head: hash=%s", uri_hash)
                 continue  # only handle HTTP insertion for the moment
