@@ -10,8 +10,10 @@ import sys
 
 
 DATA_DIR_NAME = '.ouinet'
-DESC_FILE_EXT = '.desc'
+URI_FILE_EXT = '.uri'
+DATA_FILE_EXT = '.data'
 HTTP_RPH_FILE_EXT = '.http-rph'
+DESC_FILE_EXT = '.desc'
 
 
 _logger = logging.getLogger('ouinet.inject')
@@ -34,6 +36,9 @@ def uri_hash_from_path(path):
 
 def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, DATA_DIR_NAME, uri_hash + DESC_FILE_EXT)
+
+def inject_uri(uri, data_path, **kwargs):
+    print("TODO: inject URI:", uri)  # XXXX
 
 def inject_dir(input_dir, output_dir):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
@@ -66,7 +71,12 @@ def inject_dir(input_dir, output_dir):
             uri_hash = uri_hash_from_path(fp)
             if not uri_hash:
                 continue  # not a URI file
-            http_rphp = os.path.splitext(fp)[0] + HTTP_RPH_FILE_EXT
+            uri_prefix = os.path.splitext(fp)[0]
+
+            urip = uri_prefix + URI_FILE_EXT
+            datap = uri_prefix + DATA_FILE_EXT
+            http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
+
             if not os.path.exists(http_rphp):
                 _logger.warning("missing HTTP response head for URI hash: %s", uri_hash)
                 continue  # only handle HTTP insertion for the moment
@@ -75,7 +85,11 @@ def inject_dir(input_dir, output_dir):
             if os.path.exists(descp):
                 _logger.debug("skipping URI hash with existing descriptor: %s", uri_hash)
                 continue  # a descriptor for the URI already exists
-            print("TODO: handle URI file:", fp)  # XXXX
+
+            with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
+                uri = urif.read()
+                http_rph = http_rphf.read()
+                inject_uri(uri, datap, meta_http_rph=http_rph)
 
 def main():
     parser = argparse.ArgumentParser(
