@@ -42,6 +42,10 @@ def uri_hash_from_path(path):
     'b559c7edd3fb67374c1a25e739cdd7edd1d79949'
     """
     # The hash above is for ``https://example.com/``.
+    #
+    # The splitting mimics that of Git object storage:
+    # we use the initial two digits since
+    # with SHA1 all bytes are vary more or less uniformly.
     m = _uri_hash_path_rx.match(path)
     return ''.join(m.groups()).lower() if m else ''
 
