@@ -11,6 +11,7 @@ import re
 import subprocess
 import uuid
 import sys
+import time
 
 from http.client import HTTPResponse
 
@@ -104,6 +105,7 @@ def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
         '!ouinet_version': 0,
         'url': canonical_uri,
         'id': str(uuid.uuid4()),
+        'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
         'head': meta_http_rph,
         'body_link': data_ipfs_cid,
     }
