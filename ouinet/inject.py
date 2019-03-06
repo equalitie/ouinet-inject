@@ -7,6 +7,8 @@ import hashlib
 import logging
 import os
 import re
+import subprocess
+import uuid
 import sys
 
 
@@ -39,7 +41,36 @@ def uri_hash_from_path(path):
 def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, DATA_DIR_NAME, uri_hash + DESC_FILE_EXT)
 
+def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
+    # TODO: Process HTTP response head.
+
+    # v0 descriptors only support HTTP exchanges,
+    # with compulsory response head metadata,
+    # and a single IPFS CID pointing to the body.
+    desc = {
+        '!ouinet_version': 0,
+        'url': canonical_uri,
+        'id': str(uuid.uuid4()),
+        'head': kwargs['meta_http_rph'],
+        'body_link': data_ipfs_cid,
+    }
+    return desc
+
+def descriptor_from_file(canonical_uri, data_path, **kwargs):
+    # This only computes and returns the CID, without seeding.
+    # The daemon need not be running.
+    # We may want to instead use native Python packages for this.
+    ipfs_add = subprocess.run(['ipfs', 'add', '-qn', data_path],
+                              capture_output=True, check=True)
+    data_ipfs_cid = ipfs_add.stdout.decode().strip()
+    return descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
+
+def get_canonical_uri(uri):
+    return uri  # TODO
+
 def inject_uri(uri, data_path, **kwargs):
+    curi = get_canonical_uri(uri)
+    desc = descriptor_from_file(curi, data_path, **kwargs)
     print("TODO: inject URI:", uri)  # XXXX
 
 def inject_dir(input_dir, output_dir):
