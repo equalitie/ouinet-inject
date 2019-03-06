@@ -24,6 +24,7 @@ DATA_FILE_EXT = '.data'
 HTTP_RPH_FILE_EXT = '.http-rph'
 DESC_FILE_EXT = '.desc'
 INS_FILE_EXT_PFX = '.ins-'
+DATA_DIR_NAME = 'data'
 
 
 _logger = logging.getLogger('ouinet.inject')
@@ -51,6 +52,30 @@ def uri_hash_from_path(path):
 
 def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash + DESC_FILE_EXT)
+
+def data_path_from_data_mhash(data_mhash, output_dir):
+    """Return the output path for a file with the given `data_mhash`.
+
+    >>> mhash = 'QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH'
+    >>> data_path_from_data_mhash(mhash, '.').split(os.path.sep)
+    ['.', 'data', 'b4', 'bafybeif7ztnhq65lumvvtr4ekcwd2ifwgm3awq4zfr3srh462rwyinlb4y']
+    """
+    # The hash above is for an empty (zero-length) file.
+    #
+    # Use a Base32 hash since it is case-insensitive,
+    # so we avoid collisions on platforms like Windows.
+    #
+    # Also, since ASCII-encoded multihashes have prefix bytes indicating things like
+    # the encoding base, hash function code, hash size etc.,
+    # we prefer end digits for the parent directory,
+    # but not the last one since it may be affected by padding.
+    # The [-3:-1] digits are used as in IPFS v7 repository format,
+    # though our hashes are for the whole file and not just for blocks.
+    ipfs_cid = subprocess.run(['ipfs', 'cid', 'base32'],
+                              input=data_mhash.encode(),
+                              capture_output=True, check=True)
+    b32_mhash = ipfs_cid.stdout.decode().strip()
+    return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -119,13 +144,20 @@ def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
     return desc
 
 def descriptor_from_file(canonical_uri, data_path, **kwargs):
+    """Returns the descriptor and a hash of the data.
+
+    The descriptor is a mapping.  The hash is a string containing
+    the ASCII-encoded multihash provided by IPFS.
+    """
+
     # This only computes and returns the CID, without seeding.
     # The daemon need not be running.
     # We may want to instead use native Python packages for this.
     ipfs_add = subprocess.run(['ipfs', 'add', '-qn', data_path],
                               capture_output=True, check=True)
     data_ipfs_cid = ipfs_add.stdout.decode().strip()
-    return descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
+    desc = descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
+    return (desc, data_ipfs_cid)
 
 def bep44_insert(desc_link, desc_inline):
     """Return a signed BEP44 mutable data item (as bytes)."""
@@ -138,14 +170,15 @@ def get_canonical_uri(uri):
 def inject_uri(uri, data_path, **kwargs):
     """Create descriptor and insertion data for the injection of the `uri`.
 
-    A tuple is returned with the serialized descriptor (as bytes)
+    A tuple is returned with the serialized descriptor (as bytes),
+    a multihash of the data (as a string),
     and a dictionary mapping the different index names to
     their respective serialized insertion data (as bytes).
     """
 
     # Generate the descriptor.
     curi = get_canonical_uri(uri)
-    desc = descriptor_from_file(curi, data_path, **kwargs)
+    (desc, data_mhash) = descriptor_from_file(curi, data_path, **kwargs)
 
     # Serialize the descriptor for index insertion.
     desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
@@ -157,7 +190,7 @@ def inject_uri(uri, data_path, **kwargs):
     # Prepare insertion of the descriptor into indexes.
     bep44_ins_data = bep44_insert(desc_link, desc_inline)
 
-    return (desc_data, {'bep44': bep44_ins_data})
+    return (desc_data, data_mhash, {'bep44': bep44_ins_data})
 
 def inject_dir(input_dir, output_dir):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
@@ -219,20 +252,28 @@ def inject_dir(input_dir, output_dir):
                 http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
 
             # After all the previous checks, proceed to the real injection.
-            (desc_data, inj_data) = inject_uri(uri, datap, meta_http_rph=http_rph)
+            (desc_data, data_mhash, inj_data) = inject_uri(uri, datap, meta_http_rph=http_rph)
 
             # Write descriptor and insertion data to the output directory.
+            # TODO: handle exceptions
             desc_dir = os.path.dirname(descp)
             if not os.path.exists(desc_dir):
                 os.makedirs(desc_dir, exist_ok=True)
-            # TODO: handle exceptions
             with open(descp, 'wb') as descf:
                 descf.write(desc_data)
             desc_prefix = os.path.splitext(descp)[0]
             for (idx, idx_inj_data) in inj_data.items():
                 with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
                     injf.write(idx_inj_data)
-            # TODO: copy data file
+
+            # Hard-link the data file.
+            # TODO: look for better options
+            # TODO: handle exceptions
+            out_datap = data_path_from_data_mhash(data_mhash, output_dir)
+            out_data_dir = os.path.dirname(out_datap)
+            if not os.path.exists(out_data_dir):
+                os.makedirs(out_data_dir, exist_ok=True)
+            os.link(datap, out_datap)
 
 def main():
     parser = argparse.ArgumentParser(
