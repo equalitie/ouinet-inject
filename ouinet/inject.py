@@ -5,6 +5,7 @@
 import argparse
 import hashlib
 import io
+import json
 import logging
 import os
 import re
@@ -12,6 +13,7 @@ import subprocess
 import uuid
 import sys
 import time
+import zlib
 
 from http.client import HTTPResponse
 
@@ -120,13 +122,37 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
     data_ipfs_cid = ipfs_add.stdout.decode().strip()
     return descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
 
+def bep44_insert(desc_link, desc_inline):
+    """Return a signed BEP44 mutable data item (as bytes)."""
+    print("TODO: insert BEP44 data")  # XXXX
+    return b''  # TODO
+
 def get_canonical_uri(uri):
     return uri  # TODO
 
 def inject_uri(uri, data_path, **kwargs):
+    """Create descriptor and insertion data for the injection of the `uri`.
+
+    A tuple is returned with the serialized descriptor (as bytes)
+    and a dictionary mapping the different index names to
+    their respective serialized insertion data (as bytes).
+    """
+
+    # Generate the descriptor.
     curi = get_canonical_uri(uri)
     desc = descriptor_from_file(curi, data_path, **kwargs)
-    print("TODO: inject URI:", uri)  # XXXX
+
+    # Serialize the descriptor for index insertion.
+    desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
+    ipfs_add = subprocess.run(['ipfs', 'add', '-qn'],
+                              input=desc_data, capture_output=True, check=True)
+    desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
+    desc_inline = b'/zlib/' + zlib.compress(desc_data)
+
+    # Prepare insertion of the descriptor into indexes.
+    bep44_ins_data = bep44_insert(desc_link, desc_inline)
+
+    return (desc_data, {'bep44': bep44_ins_data})
 
 def inject_dir(input_dir, output_dir):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
@@ -151,6 +177,8 @@ def inject_dir(input_dir, output_dir):
 
     The HTTP response head will be processed, thus the head in the resulting
     descriptor may differ from that in the ``.http-rph`` file.
+
+    TODO: describe output files
     """
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
@@ -184,7 +212,23 @@ def inject_dir(input_dir, output_dir):
                     _logger.error("skipping URI with invalid hash: hash=%s", uri_hash)
                     continue
                 http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
-                inject_uri(uri, datap, meta_http_rph=http_rph)
+
+            # After all the previous checks, proceed to the real injection.
+            (desc_data, inj_data) = inject_uri(uri, datap, meta_http_rph=http_rph)
+
+            # Write descriptor and insertion data to the output directory.
+            desc_dir = os.path.dirname(descp)
+            if not os.path.exists(desc_dir):
+                os.makedirs(desc_dir, exist_ok=True)
+            # TODO: handle exceptions
+            with open(descp, 'wb') as descf:
+                descf.write(desc_data)
+            # TODO: save insertion data
+            #desc_prefix = os.path.splitext(descp)[0]
+            #for (idx, idx_inj_data) in inj_data.items():
+            #    with open(XXXX, 'wb') as injf:
+            #        injf.write(idx_inj_data)
+            # TODO: copy data file
 
 def main():
     parser = argparse.ArgumentParser(
