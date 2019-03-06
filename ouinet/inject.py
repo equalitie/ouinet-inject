@@ -44,13 +44,17 @@ def inject_dir(input_dir, output_dir):
     being the hexadecimal, lower-case SHA1 hash of the URI, in `input_dir`
     there must exist:
 
-    - ``URI_HASH[:2]/URI_HASH[2:].uri`` with the URI itself
+    - ``URI_HASH[:2]/URI_HASH[2:].uri`` with the URI itself;
+      the hash of the *whole content* of the file must be ``URI_HASH``
     - ``URI_HASH[:2]/URI_HASH[2:].http-rph`` with the head of the HTTP response
     - ``URI_HASH[:2]/URI_HASH[2:].data`` with the body of the HTTP response
       (after transfer decoding if a non-identity transfer encoding was used)
 
     If a ``.ouinet/URI_HASH.desc`` file already exists in the `output_dir`,
     the injection for that URI is skipped.
+
+    The HTTP response head will be processed, thus the head in the resulting
+    descriptor may differ from that in the ``.http-rph`` file.
     """
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
