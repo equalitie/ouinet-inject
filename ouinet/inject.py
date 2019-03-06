@@ -3,6 +3,7 @@
 """
 
 import argparse
+import logging
 import os
 import re
 import sys
@@ -12,6 +13,8 @@ DATA_DIR_NAME = '.ouinet'
 DESC_FILE_EXT = '.desc'
 HTTP_RPH_FILE_EXT = '.http-rph'
 
+
+_logger = logging.getLogger('ouinet.inject')
 
 _uri_hash_path_re = r'^.*/([0-9A-Fa-f]{2})/([0-9A-Fa-f]{38})\.uri$'.replace('/', os.path.sep)
 _uri_hash_path_rx = re.compile(_uri_hash_path_re)
@@ -65,10 +68,12 @@ def inject_dir(input_dir, output_dir):
                 continue  # not a URI file
             http_rphp = os.path.splitext(fp)[0] + HTTP_RPH_FILE_EXT
             if not os.path.exists(http_rphp):
+                _logger.warning("missing HTTP response head for URI hash: %s", uri_hash)
                 continue  # only handle HTTP insertion for the moment
 
             descp = desc_path_from_uri_hash(uri_hash, output_dir)
             if os.path.exists(descp):
+                _logger.debug("skipping URI hash with existing descriptor: %s", uri_hash)
                 continue  # a descriptor for the URI already exists
             print("TODO: handle URI file:", fp)  # XXXX
 
