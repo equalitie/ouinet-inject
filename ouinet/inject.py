@@ -3,6 +3,7 @@
 """
 
 import argparse
+import hashlib
 import logging
 import os
 import re
@@ -27,10 +28,11 @@ def uri_hash_from_path(path):
     The result is a full SHA1 hexadecimal string, or the empty string if the
     hash can not be extracted.
 
-    >>> path = os.path.join('path', 'to', '64', '6503c01c841c04e3c0cbc8f6edcc737da466ef.uri')
+    >>> path = os.path.join('path', 'to', 'b5', '59c7edd3fb67374c1a25e739cdd7edd1d79949.uri')
     >>> uri_hash_from_path(path)
-    '646503c01c841c04e3c0cbc8f6edcc737da466ef'
+    'b559c7edd3fb67374c1a25e739cdd7edd1d79949'
     """
+    # The hash above is for ``https://example.com/``.
     m = _uri_hash_path_rx.match(path)
     return ''.join(m.groups()).lower() if m else ''
 
@@ -88,6 +90,9 @@ def inject_dir(input_dir, output_dir):
 
             with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
                 uri = urif.read()
+                if hashlib.sha1(uri).hexdigest() != uri_hash:
+                    _logger.error("URI hash does not match hash of URI file: %s", uri_hash)
+                    continue
                 http_rph = http_rphf.read()
                 inject_uri(uri, datap, meta_http_rph=http_rph)
 
