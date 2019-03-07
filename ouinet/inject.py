@@ -164,7 +164,7 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
 def index_key_from_http_url(canonical_url):
     return canonical_url
 
-def bep44_insert(key, desc_link, desc_inline):
+def bep44_insert(index_key, desc_link, desc_inline):
     """Return a signed BEP44 mutable data item (as bytes)."""
 
     # It is not safe to assume that storing more than 1000 bytes will succeed,
@@ -173,7 +173,7 @@ def bep44_insert(key, desc_link, desc_inline):
     if len(bencode(desc_inline)) > 1000:
         v = desc_link
 
-    salt = hashlib.sha1(key.encode()).digest()  # SHA1 hash of the key
+    salt = hashlib.sha1(index_key.encode()).digest()  # SHA1 hash of the index key
     seq = int(time.time())  # integer Unix time stamp
 
     # Low-level signature buffer computation is mandated by
