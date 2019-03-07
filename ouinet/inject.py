@@ -17,6 +17,8 @@ import zlib
 
 from http.client import HTTPResponse
 
+from bencoder import bencode
+
 
 OUINET_DIR_NAME = '.ouinet'
 URI_FILE_EXT = '.uri'
@@ -159,8 +161,28 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
     desc = descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
     return (desc, data_ipfs_cid)
 
-def bep44_insert(desc_link, desc_inline):
+def index_key_from_http_url(canonical_url):
+    return canonical_url
+
+def bep44_insert(key, desc_link, desc_inline):
     """Return a signed BEP44 mutable data item (as bytes)."""
+
+    # It is not safe to assume that storing more than 1000 bytes will succeed,
+    # according to <http://bittorrent.org/beps/bep_0044.html#messages>.
+    v = desc_inline
+    if len(bencode(desc_inline)) > 1000:
+        v = desc_link
+
+    salt = hashlib.sha1(key.encode()).digest()  # SHA1 hash of the key
+    seq = int(time.time())  # integer Unix time stamp
+
+    # Low-level signature buffer computation is mandated by
+    # <http://bittorrent.org/beps/bep_0044.html#signature-verification>.
+    sigbuf = b''
+    sigbuf += b'4:salt%d:%s' % (len(salt), salt)
+    sigbuf += b'3:seqi%de' % seq
+    sigbuf += b'1:v%d:%s' % (len(v), v)
+
     print("TODO: insert BEP44 data")  # XXXX
     return b''  # TODO
 
@@ -188,7 +210,8 @@ def inject_uri(uri, data_path, **kwargs):
     desc_inline = b'/zlib/' + zlib.compress(desc_data)
 
     # Prepare insertion of the descriptor into indexes.
-    bep44_ins_data = bep44_insert(desc_link, desc_inline)
+    index_key = index_key_from_http_url(curi)
+    bep44_ins_data = bep44_insert(index_key, desc_link, desc_inline)
 
     return (desc_data, data_mhash, {'bep44': bep44_ins_data})
 
