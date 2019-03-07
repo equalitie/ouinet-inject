@@ -183,8 +183,19 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
     sigbuf += b'3:seqi%de' % seq
     sigbuf += b'1:v%d:%s' % (len(v), v)
 
-    print("TODO: insert BEP44 data")  # XXXX
-    return b''  # TODO
+    # Sign, build exported message fields and encode the result.
+    # We follow the names used in the BEP44 document.
+    sig = priv_key.sign(sigbuf)[:-len(sigbuf)]  # remove trailing signed message
+    return bencode(dict(
+        # cas is not compulsory
+        # id depends on the publishing node
+        k=priv_key.verify_key.encode(),
+        salt=salt,
+        seq=seq,
+        # token depends on the insertion
+        sig=sig,
+        v=v
+    ))
 
 def get_canonical_uri(uri):
     return uri  # TODO
