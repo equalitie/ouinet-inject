@@ -17,9 +17,8 @@ import zlib
 
 from http.client import HTTPResponse
 
+import bencoder
 import nacl.signing
-
-from bencoder import bencode
 
 
 OUINET_DIR_NAME = '.ouinet'
@@ -172,7 +171,7 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
     # It is not safe to assume that storing more than 1000 bytes will succeed,
     # according to <http://bittorrent.org/beps/bep_0044.html#messages>.
     v = desc_inline
-    if len(bencode(desc_inline)) > 1000:
+    if len(bencoder.bencode(desc_inline)) > 1000:
         v = desc_link
 
     salt = hashlib.sha1(index_key.encode()).digest()  # SHA1 hash of the index key
@@ -188,7 +187,7 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
     # Sign, build exported message fields and encode the result.
     # We follow the names used in the BEP44 document.
     sig = priv_key.sign(sigbuf)[:-len(sigbuf)]  # remove trailing signed message
-    return bencode(dict(
+    return bencoder.bencode(dict(
         # cas is not compulsory
         # id depends on the publishing node
         k=priv_key.verify_key.encode(),
