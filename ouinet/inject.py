@@ -266,14 +266,15 @@ def inject_dir(input_dir, output_dir):
                 with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
                     injf.write(idx_inj_data)
 
-            # Hard-link the data file.
+            # Hard-link the data file (if not already there).
             # TODO: look for better options
             # TODO: handle exceptions
             out_datap = data_path_from_data_mhash(data_mhash, output_dir)
-            out_data_dir = os.path.dirname(out_datap)
-            if not os.path.exists(out_data_dir):
-                os.makedirs(out_data_dir, exist_ok=True)
-            os.link(datap, out_datap)
+            if not os.path.exists(out_datap):
+                out_data_dir = os.path.dirname(out_datap)
+                if not os.path.exists(out_data_dir):
+                    os.makedirs(out_data_dir, exist_ok=True)
+                os.link(datap, out_datap)
 
 def main():
     parser = argparse.ArgumentParser(
