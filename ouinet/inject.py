@@ -17,6 +17,8 @@ import zlib
 
 from http.client import HTTPResponse
 
+import nacl.signing
+
 from bencoder import bencode
 
 
@@ -319,6 +321,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Sign content to be published using Ouinet.")
     parser.add_argument(
+        '--bep44-private-key', metavar="HEX_KEY", default='',
+        help=("hex-encoded private key for BEP44 index insertion"))
+    parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
         'input_directory', metavar="INPUT_DIR", type=os.path.normpath,
         help="the directory where HTTP exchanges are read from")
@@ -328,8 +333,14 @@ def main():
         help="the directory where content data, descriptors and insertion data will be saved to")
     args = parser.parse_args()
 
+    bep44_priv_key = None
+    if args.bep44_private_key:
+        # TODO: retrieve key from disk
+        bep44_priv_key = nacl.signing.SigningKey(
+            nacl.signing.SignedMessage.fromhex(args.bep44_private_key))
+
     inject_dir(input_dir=args.input_directory, output_dir=args.output_directory,
-               bep44_priv_key=None)  # TODO: get BEP44 private key
+               bep44_priv_key=bep44_priv_key)
 
 if __name__ == '__main__':
     sys.exit(main())
