@@ -164,7 +164,7 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
 def index_key_from_http_url(canonical_url):
     return canonical_url
 
-def bep44_insert(index_key, desc_link, desc_inline):
+def bep44_insert(index_key, desc_link, desc_inline, priv_key):
     """Return a signed BEP44 mutable data item (as bytes)."""
 
     # It is not safe to assume that storing more than 1000 bytes will succeed,
@@ -189,7 +189,7 @@ def bep44_insert(index_key, desc_link, desc_inline):
 def get_canonical_uri(uri):
     return uri  # TODO
 
-def inject_uri(uri, data_path, **kwargs):
+def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     """Create descriptor and insertion data for the injection of the `uri`.
 
     A tuple is returned with the serialized descriptor (as bytes),
@@ -211,11 +211,13 @@ def inject_uri(uri, data_path, **kwargs):
 
     # Prepare insertion of the descriptor into indexes.
     index_key = index_key_from_http_url(curi)
-    bep44_ins_data = bep44_insert(index_key, desc_link, desc_inline)
+    ins_data = {}
+    if bep44_priv_key:
+        ins_data['bep44'] = bep44_insert(index_key, desc_link, desc_inline, bep44_priv_key)
 
-    return (desc_data, data_mhash, {'bep44': bep44_ins_data})
+    return (desc_data, data_mhash, ins_data)
 
-def inject_dir(input_dir, output_dir):
+def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
 
     Limitations:
@@ -275,7 +277,10 @@ def inject_dir(input_dir, output_dir):
                 http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
 
             # After all the previous checks, proceed to the real injection.
-            (desc_data, data_mhash, inj_data) = inject_uri(uri, datap, meta_http_rph=http_rph)
+            (desc_data, data_mhash, inj_data) = inject_uri(
+                uri, datap, meta_http_rph=http_rph,
+                bep44_priv_key=bep44_priv_key
+            )
 
             # Write descriptor and insertion data to the output directory.
             # TODO: handle exceptions
@@ -312,7 +317,8 @@ def main():
         help="the directory where content data, descriptors and insertion data will be saved to")
     args = parser.parse_args()
 
-    inject_dir(input_dir=args.input_directory, output_dir=args.output_directory)
+    inject_dir(input_dir=args.input_directory, output_dir=args.output_directory,
+               bep44_priv_key=None)  # TODO: get BEP44 private key
 
 if __name__ == '__main__':
     sys.exit(main())
