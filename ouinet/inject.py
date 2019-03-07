@@ -4,6 +4,7 @@
 
 import argparse
 import hashlib
+import http.client
 import io
 import json
 import logging
@@ -14,8 +15,6 @@ import uuid
 import sys
 import time
 import zlib
-
-from http.client import HTTPResponse
 
 import bencoder
 import nacl.signing
@@ -117,7 +116,7 @@ def process_http_response(resp_str):
     # Parse response head from string.
     rpf = io.BytesIO(resp_str.encode('iso-8859-1'))  # RFC 7230#3.2.4
     rpf.makefile = lambda *a, **k: rpf  # monkey-patch as a socket
-    rp = HTTPResponse(rpf)
+    rp = http.client.HTTPResponse(rpf)
     rp.begin()
 
     # Build a new response head string with selected headers.
