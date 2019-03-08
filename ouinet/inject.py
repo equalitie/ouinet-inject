@@ -27,8 +27,8 @@ DESC_FILE_EXT = '.desc'
 INS_FILE_EXT_PFX = '.ins-'
 DATA_DIR_NAME = 'data'
 
+logger = logging.getLogger(__name__)
 
-_logger = logging.getLogger('ouinet.inject')
 
 def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash + DESC_FILE_EXT)
@@ -246,11 +246,11 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
 
             if not os.path.exists(datap):
-                _logger.warning("skipping URI with missing data file: %s", urip)
+                logger.warning("skipping URI with missing data file: %s", urip)
                 continue  # data file must exist even if empty
 
             if not os.path.exists(http_rphp):
-                _logger.warning("skipping URI with missing HTTP response head: %s", urip)
+                logger.warning("skipping URI with missing HTTP response head: %s", urip)
                 continue  # only handle HTTP insertion for the moment
 
             with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
@@ -260,7 +260,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             uri_hash = hashlib.sha1(uri.encode()).hexdigest()
             descp = desc_path_from_uri_hash(uri_hash, output_dir)
             if os.path.exists(descp):
-                _logger.debug("skipping URI with existing descriptor: %s", urip)
+                logger.debug("skipping URI with existing descriptor: %s", urip)
                 continue  # a descriptor for the URI already exists
 
             # After all the previous checks, proceed to the real injection.
