@@ -9,7 +9,6 @@ import io
 import json
 import logging
 import os
-import re
 import subprocess
 import uuid
 import sys
@@ -30,27 +29,6 @@ DATA_DIR_NAME = 'data'
 
 
 _logger = logging.getLogger('ouinet.inject')
-
-_uri_hash_path_re = r'^.*/([0-9A-Fa-f]{2})/([0-9A-Fa-f]{38})\.uri$'.replace('/', os.path.sep)
-_uri_hash_path_rx = re.compile(_uri_hash_path_re)
-
-def uri_hash_from_path(path):
-    """Return the URI hash encoded in the `path`.
-
-    The result is a full SHA1 hexadecimal string, or the empty string if the
-    hash can not be extracted.
-
-    >>> path = os.path.join('path', 'to', 'b5', '59c7edd3fb67374c1a25e739cdd7edd1d79949.uri')
-    >>> uri_hash_from_path(path)
-    'b559c7edd3fb67374c1a25e739cdd7edd1d79949'
-    """
-    # The hash above is for ``https://example.com/``.
-    #
-    # The splitting mimics that of Git object storage:
-    # we use the initial two digits since
-    # with SHA1 all bytes are vary more or less uniformly.
-    m = _uri_hash_path_rx.match(path)
-    return ''.join(m.groups()).lower() if m else ''
 
 def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash + DESC_FILE_EXT)
@@ -236,17 +214,18 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     - Only a single injection per URI is supported.
     - Only injection of HTTP exchanges is supported.
 
-    For each injection to be performed for a given URI, with ``URI_HASH``
-    being the hexadecimal, lower-case SHA1 hash of the URI, in `input_dir`
-    there must exist:
+    For each injection to be performed for a given URI,
+    somewhere under `input_dir` there must exist:
 
-    - ``URI_HASH[:2]/URI_HASH[2:].uri`` with the URI itself;
-      the hash of the *whole content* of the file must be ``URI_HASH``
-    - ``URI_HASH[:2]/URI_HASH[2:].http-rph`` with the head of the HTTP response
-    - ``URI_HASH[:2]/URI_HASH[2:].data`` with the body of the HTTP response
+    - ``NAME.uri`` with the URI itself; the ``NAME`` is not relevant
+    - ``NAME.http-rph`` with the head of the HTTP response
+    - ``NAME.data`` with the body of the HTTP response
       (after transfer decoding if a non-identity transfer encoding was used)
 
-    If a ``.ouinet/URI_HASH.desc`` file already exists in the `output_dir`,
+    The resulting descriptor for a URI is saved to
+    ``.ouinet/URI_HASH.desc`` in the `output_dir`,
+    where ``URI_HASH`` is the hexadecimal, lower-case SHA1 hash of the URI.
+    If such a file already exists in the `output_dir`,
     the injection for that URI is skipped.
 
     The HTTP response head will be processed, thus the head in the resulting
@@ -257,10 +236,9 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
         for fn in filenames:
-            fp = os.path.join(dirpath, fn)
-            uri_hash = uri_hash_from_path(fp)
-            if not uri_hash:
+            if not fn.endswith(URI_FILE_EXT):
                 continue  # not a URI file
+            fp = os.path.join(dirpath, fn)
             uri_prefix = os.path.splitext(fp)[0]
 
             urip = uri_prefix + URI_FILE_EXT
@@ -268,24 +246,22 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
 
             if not os.path.exists(datap):
-                _logger.warning("skipping URI with missing data file: hash=%s", uri_hash)
+                _logger.warning("skipping URI with missing data file: %s", urip)
                 continue  # data file must exist even if empty
 
             if not os.path.exists(http_rphp):
-                _logger.warning("skipping URI with missing HTTP response head: hash=%s", uri_hash)
+                _logger.warning("skipping URI with missing HTTP response head: %s", urip)
                 continue  # only handle HTTP insertion for the moment
-
-            descp = desc_path_from_uri_hash(uri_hash, output_dir)
-            if os.path.exists(descp):
-                _logger.debug("skipping URI with existing descriptor: hash=%s", uri_hash)
-                continue  # a descriptor for the URI already exists
 
             with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
                 uri = urif.read().decode()  # only ASCII, RFC 3986#1.2.1
-                if hashlib.sha1(uri.encode()).hexdigest() != uri_hash:
-                    _logger.error("skipping URI with invalid hash: hash=%s", uri_hash)
-                    continue
                 http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
+
+            uri_hash = hashlib.sha1(uri.encode()).hexdigest()
+            descp = desc_path_from_uri_hash(uri_hash, output_dir)
+            if os.path.exists(descp):
+                _logger.debug("skipping URI with existing descriptor: %s", urip)
+                continue  # a descriptor for the URI already exists
 
             # After all the previous checks, proceed to the real injection.
             (desc_data, data_mhash, inj_data) = inject_uri(
