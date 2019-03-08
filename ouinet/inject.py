@@ -260,7 +260,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             uri_hash = hashlib.sha1(uri.encode()).hexdigest()
             descp = desc_path_from_uri_hash(uri_hash, output_dir)
             if os.path.exists(descp):
-                logger.debug("skipping URI with existing descriptor: %s", urip)
+                logger.info("skipping URI with existing descriptor: %s", urip)
                 continue  # a descriptor for the URI already exists
 
             # After all the previous checks, proceed to the real injection.
@@ -273,12 +273,15 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             # TODO: handle exceptions
             desc_dir = os.path.dirname(descp)
             if not os.path.exists(desc_dir):
+                logger.info("creating output directory for descriptor data: %s", desc_dir)
                 os.makedirs(desc_dir, exist_ok=True)
             with open(descp, 'wb') as descf:
+                logger.debug("writing descriptor: uri_hash=%s", uri_hash)
                 descf.write(desc_data)
             desc_prefix = os.path.splitext(descp)[0]
             for (idx, idx_inj_data) in inj_data.items():
                 with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
+                    logger.debug("writing insertion data (%s): uri_hash=%s", idx, uri_hash)
                     injf.write(idx_inj_data)
 
             # Hard-link the data file (if not already there).
@@ -289,6 +292,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                 out_data_dir = os.path.dirname(out_datap)
                 if not os.path.exists(out_data_dir):
                     os.makedirs(out_data_dir, exist_ok=True)
+                logger.debug("linking data file: uri_hash=%s", uri_hash)
                 os.link(datap, out_datap)
 
 def main():
@@ -314,6 +318,7 @@ def main():
     # Retrieve the BEP44 private key from disk or argument.
     bep44_priv_key = args.bep44_private_key
     if os.path.sep in bep44_priv_key:  # path to file with key
+        logger.debug("loading BEP44 private key from file: %s", bep44_priv_key)
         with open(bep44_priv_key) as b44kf:
             bep44_priv_key = b44kf.read().strip()
     if bep44_priv_key:  # decode key
