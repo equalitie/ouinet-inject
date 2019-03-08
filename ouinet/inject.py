@@ -209,6 +209,9 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
 def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
 
+    `bep44_priv_key` is the Ed25519 private key to be used to
+    sign insertions into the BEP44 index.
+
     Limitations:
 
     - Only a single injection per URI is supported.
