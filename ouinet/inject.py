@@ -25,7 +25,7 @@ DATA_FILE_EXT = '.data'
 HTTP_RPH_FILE_EXT = '.http-rph'
 DESC_FILE_EXT = '.desc'
 INS_FILE_EXT_PFX = '.ins-'
-DATA_DIR_NAME = 'data'
+DATA_DIR_NAME = 'ouinet-data'
 
 logger = logging.getLogger(__name__)
 
