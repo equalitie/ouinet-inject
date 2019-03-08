@@ -16,6 +16,7 @@ import time
 import zlib
 
 import bencoder
+import nacl.encoding
 import nacl.signing
 
 
@@ -327,6 +328,9 @@ def main():
     if bep44_priv_key:  # decode key
         bep44_priv_key = nacl.signing.SigningKey(
             nacl.signing.SignedMessage.fromhex(bep44_priv_key))
+        bep44_pub_key = bep44_priv_key.verify_key
+        logger.info("BEP44 index public key: %s",
+                    bep44_pub_key.encode(nacl.encoding.HexEncoder).decode())
 
     inject_dir(input_dir=args.input_directory, output_dir=args.output_directory,
                bep44_priv_key=bep44_priv_key)
