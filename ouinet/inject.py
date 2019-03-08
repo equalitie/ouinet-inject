@@ -295,8 +295,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Sign content to be published using Ouinet.")
     parser.add_argument(
-        '--bep44-private-key', metavar="HEX_KEY", default='',
-        help=("hex-encoded private key for BEP44 index insertion"))
+        '--bep44-private-key', metavar="KEY", default='',
+        help=("hex-encoded private key for BEP44 index insertion; "
+              "if KEY contains '{0}' (e.g. '.{0}bep44.key'), "
+              "handle as a file containing the encoded key".format(
+                  os.path.sep
+              )))
     parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
         'input_directory', metavar="INPUT_DIR", type=os.path.normpath,
@@ -307,11 +311,14 @@ def main():
         help="the directory where content data, descriptors and insertion data will be saved to")
     args = parser.parse_args()
 
-    bep44_priv_key = None
-    if args.bep44_private_key:
-        # TODO: retrieve key from disk
+    # Retrieve the BEP44 private key from disk or argument.
+    bep44_priv_key = args.bep44_private_key
+    if os.path.sep in bep44_priv_key:  # path to file with key
+        with open(bep44_priv_key) as b44kf:
+            bep44_priv_key = b44kf.read().strip()
+    if bep44_priv_key:  # decode key
         bep44_priv_key = nacl.signing.SigningKey(
-            nacl.signing.SignedMessage.fromhex(args.bep44_private_key))
+            nacl.signing.SignedMessage.fromhex(bep44_priv_key))
 
     inject_dir(input_dir=args.input_directory, output_dir=args.output_directory,
                bep44_priv_key=bep44_priv_key)
