@@ -324,4 +324,6 @@ def main():
                bep44_priv_key=bep44_priv_key)
 
 if __name__ == '__main__':
+    logging.basicConfig(format='%(levelname)s: %(message)s',
+                        level=logging.INFO)
     sys.exit(main())
