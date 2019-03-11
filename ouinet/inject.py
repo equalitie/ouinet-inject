@@ -261,43 +261,52 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                 uri = urif.read().decode()  # only ASCII, RFC 3986#1.2.1
                 http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
 
-            uri_hash = hashlib.sha1(uri.encode()).hexdigest()
-            descp = desc_path_from_uri_hash(uri_hash, output_dir)
-            if os.path.exists(descp):
-                logger.info("skipping URI with existing descriptor: %s", urip)
-                continue  # a descriptor for the URI already exists
+            save_uri_injection(uri, datap, output_dir,
+                               bep44_priv_key=bep44_priv_key,
+                               meta_http_rph=http_rph)
 
-            # After all the previous checks, proceed to the real injection.
-            (desc_data, data_mhash, inj_data) = inject_uri(
-                uri, datap, meta_http_rph=http_rph,
-                bep44_priv_key=bep44_priv_key
-            )
+def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs):
+    """Inject the `uri` and save insertion data to `output_dir`.
 
-            # Write descriptor and insertion data to the output directory.
-            # TODO: handle exceptions
-            desc_dir = os.path.dirname(descp)
-            if not os.path.exists(desc_dir):
-                logger.info("creating output directory for descriptor data: %s", desc_dir)
-                os.makedirs(desc_dir, exist_ok=True)
-            with open(descp, 'wb') as descf:
-                logger.debug("writing descriptor: uri_hash=%s", uri_hash)
-                descf.write(desc_data)
-            desc_prefix = os.path.splitext(descp)[0]
-            for (idx, idx_inj_data) in inj_data.items():
-                with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
-                    logger.debug("writing insertion data (%s): uri_hash=%s", idx, uri_hash)
-                    injf.write(idx_inj_data)
+    This is only done if insertion data is not already present for the `uri`
+    in `output_dir`.
+    """
+    uri_hash = hashlib.sha1(uri.encode()).hexdigest()
+    descp = desc_path_from_uri_hash(uri_hash, output_dir)
+    if os.path.exists(descp):
+        logger.info("skipping URI with existing descriptor: %s", urip)
+        return  # a descriptor for the URI already exists
 
-            # Hard-link the data file (if not already there).
-            # TODO: look for better options
-            # TODO: handle exceptions
-            out_datap = data_path_from_data_mhash(data_mhash, output_dir)
-            if not os.path.exists(out_datap):
-                out_data_dir = os.path.dirname(out_datap)
-                if not os.path.exists(out_data_dir):
-                    os.makedirs(out_data_dir, exist_ok=True)
-                logger.debug("linking data file: uri_hash=%s", uri_hash)
-                os.link(datap, out_datap)
+    # After all the previous checks, proceed to the real injection.
+    (desc_data, data_mhash, inj_data) = inject_uri(
+        uri, data_path, bep44_priv_key=bep44_priv_key, **kwargs
+    )
+
+    # Write descriptor and insertion data to the output directory.
+    # TODO: handle exceptions
+    desc_dir = os.path.dirname(descp)
+    if not os.path.exists(desc_dir):
+        logger.info("creating output directory for descriptor data: %s", desc_dir)
+        os.makedirs(desc_dir, exist_ok=True)
+    with open(descp, 'wb') as descf:
+        logger.debug("writing descriptor: uri_hash=%s", uri_hash)
+        descf.write(desc_data)
+    desc_prefix = os.path.splitext(descp)[0]
+    for (idx, idx_inj_data) in inj_data.items():
+        with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
+            logger.debug("writing insertion data (%s): uri_hash=%s", idx, uri_hash)
+            injf.write(idx_inj_data)
+
+    # Hard-link the data file (if not already there).
+    # TODO: look for better options
+    # TODO: handle exceptions
+    out_data_path = data_path_from_data_mhash(data_mhash, output_dir)
+    if not os.path.exists(out_data_path):
+        out_data_dir = os.path.dirname(out_data_path)
+        if not os.path.exists(out_data_dir):
+            os.makedirs(out_data_dir, exist_ok=True)
+        logger.debug("linking data file: uri_hash=%s", uri_hash)
+        os.link(data_path, out_data_path)
 
 def main():
     parser = argparse.ArgumentParser(
