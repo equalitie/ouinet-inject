@@ -274,7 +274,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
     descp = desc_path_from_uri_hash(uri_hash, output_dir)
     if os.path.exists(descp):
-        logger.info("skipping URI with existing descriptor: %s", urip)
+        logger.info("skipping URI with existing descriptor: %s", uri)
         return  # a descriptor for the URI already exists
 
     # After all the previous checks, proceed to the real injection.
