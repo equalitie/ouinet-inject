@@ -193,6 +193,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
 
     # Generate the descriptor.
     curi = get_canonical_uri(uri)
+    logger.debug("creating descriptor for URI: %s", curi)
     (desc, data_mhash) = descriptor_from_file(curi, data_path, **kwargs)
 
     # Serialize the descriptor for index insertion.
@@ -206,6 +207,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     index_key = index_key_from_http_url(curi)
     ins_data = {}
     if bep44_priv_key:
+        logger.debug("creating BEP44 insertion data for URI: %s", curi)
         ins_data['bep44'] = bep44_insert(index_key, desc_link, desc_inline, bep44_priv_key)
 
     return (desc_data, data_mhash, ins_data)
