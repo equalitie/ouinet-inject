@@ -11,13 +11,16 @@ import logging
 import os
 import subprocess
 import uuid
+import shutil
 import sys
+import tempfile
 import time
 import zlib
 
 import bencoder
 import nacl.encoding
 import nacl.signing
+import warcio.archiveiterator
 
 
 OUINET_DIR_NAME = '.ouinet'
@@ -265,6 +268,34 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                                bep44_priv_key=bep44_priv_key,
                                meta_http_rph=http_rph)
 
+def inject_warc(warc_file, output_dir, bep44_priv_key=None):
+    for record in warcio.archiveiterator.WARCIterator(warc_file):
+        # According to
+        # <https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#warc-target-uri>,
+        # response entries must have a ``WARC-Target-URI`` header with the exchange URI.
+        # Since the only thing we need from the request is the URI,
+        # we can safely ignore request records and avoid the extra effort of
+        # linking requests and responses through `WARC-Concurrent-To` and `WARC-Record-ID` headers.
+        if record.rec_type != 'response':
+            continue
+
+        uri = record.rec_headers.get_header('WARC-Target-URI')
+        http_rph = record.http_headers.to_str()
+        bodyf = record.raw_stream  # be consistent with ``Content-Encoding``
+
+        # Extract body data to a temporary file in the output directory,
+        # so that it can be safely hard-linked into the data directory.
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=output_dir, delete=True) as dataf:
+            shutil.copyfileobj(bodyf, dataf)
+            dataf.flush()
+
+            datap = os.path.join(output_dir, dataf.name)
+            save_uri_injection(uri, datap, output_dir,
+                               bep44_priv_key=bep44_priv_key,
+                               meta_http_rph=http_rph)
+
 def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
 
@@ -320,8 +351,9 @@ def main():
               )))
     parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
-        'input_directory', metavar="INPUT_DIR", type=os.path.normpath,
-        help="the directory where HTTP exchanges are read from")
+        'input', metavar="INPUT_DIR|INPUT_WARC", type=os.path.normpath,
+        help=("the directory where HTTP exchanges are read from, "
+              "or a WARC file containing such exchanges"))
     parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
         'output_directory', metavar="OUTPUT_DIR", type=os.path.normpath,
@@ -341,8 +373,13 @@ def main():
         logger.info("BEP44 index public key: %s",
                     bep44_pub_key.encode(nacl.encoding.HexEncoder).decode())
 
-    inject_dir(input_dir=args.input_directory, output_dir=args.output_directory,
-               bep44_priv_key=bep44_priv_key)
+    if os.path.isdir(args.input):
+        inject_dir(input_dir=args.input, output_dir=args.output_directory,
+                   bep44_priv_key=bep44_priv_key)
+    else:
+        with open(args.input, 'rb') as warcf:
+            inject_warc(warcf, args.output_directory,
+                        bep44_priv_key=bep44_priv_key)
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s',
