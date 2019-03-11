@@ -280,6 +280,9 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             continue
 
         uri = record.rec_headers.get_header('WARC-Target-URI')
+        if not record.http_headers:
+            logger.warning("skipping URI with missing HTTP response head: %s", uri)
+            continue  # only handle HTTP insertion for the moment
         http_rph = record.http_headers.to_str()
         bodyf = record.raw_stream  # be consistent with ``Content-Encoding``
 
