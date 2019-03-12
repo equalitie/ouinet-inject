@@ -284,12 +284,6 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     - ``NAME.data`` with the body of the HTTP response
       (after transfer decoding if a non-identity transfer encoding was used)
 
-    The resulting descriptor for a URI is saved to
-    ``.ouinet/URI_HASH.desc`` in the `output_dir`,
-    where ``URI_HASH`` is the hexadecimal, lower-case SHA1 hash of the URI.
-    If such a file already exists in the `output_dir`,
-    the injection for that URI is skipped.
-
     The HTTP response head will be processed, thus the head in the resulting
     descriptor may differ from that in the ``.http-rph`` file.
 
