@@ -354,6 +354,9 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     This is only done if insertion data is not already present for the `uri`
     in `output_dir`.
     """
+    maybe_add_ouinet_dir_readme(output_dir)
+    maybe_add_data_dir_readme(output_dir)
+
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
     descp = desc_path_from_uri_hash(uri_hash, output_dir)
     if os.path.exists(descp):
@@ -367,7 +370,6 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
-    maybe_add_ouinet_dir_readme(output_dir)
     desc_dir = os.path.dirname(descp)
     if not os.path.exists(desc_dir):
         os.makedirs(desc_dir, exist_ok=True)
@@ -383,7 +385,6 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     # Hard-link the data file (if not already there).
     # TODO: look for better options
     # TODO: handle exceptions
-    maybe_add_data_dir_readme(output_dir)
     out_data_path = data_path_from_data_mhash(data_mhash, output_dir)
     if not os.path.exists(out_data_path):
         out_data_dir = os.path.dirname(out_data_path)
