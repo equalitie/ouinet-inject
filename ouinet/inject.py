@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 
 
 def desc_path_from_uri_hash(uri_hash, output_dir):
-    return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash + DESC_FILE_EXT)
+    # The splitting mimics that of Git object storage:
+    # we use the initial two digits since
+    # with SHA1 all bytes vary more or less uniformly.
+    return os.path.join(output_dir, OUINET_DIR_NAME,
+                        uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
 
 def data_path_from_data_mhash(data_mhash, output_dir):
     """Return the output path for a file with the given `data_mhash`.
@@ -322,7 +326,6 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     # TODO: handle exceptions
     desc_dir = os.path.dirname(descp)
     if not os.path.exists(desc_dir):
-        logger.info("creating output directory for descriptor data: %s", desc_dir)
         os.makedirs(desc_dir, exist_ok=True)
     with open(descp, 'wb') as descf:
         logger.debug("writing descriptor: uri_hash=%s", uri_hash)
