@@ -287,7 +287,8 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     The HTTP response head will be processed, thus the head in the resulting
     descriptor may differ from that in the ``.http-rph`` file.
 
-    See `save_uri_injection()` for the format of output files in `output_dir`.
+    See `save_uri_injection()` for more information on
+    the storage of injections in `output_dir`.
     """
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
@@ -354,8 +355,10 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     This is only done if insertion data is not already present for the `uri`
     in `output_dir`.
 
+    Control data is stored under `OUINET_DIR_NAME` in `ouinet_dir`,
+    and content data is stored under `DATA_DIR_NAME` in `ouinet_dir`.
     See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
-    the format of output files in `output_dir`.
+    the format of output files in these directories.
     """
     maybe_add_ouinet_dir_readme(output_dir)
     maybe_add_data_dir_readme(output_dir)
