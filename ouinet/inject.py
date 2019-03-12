@@ -82,10 +82,6 @@ def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, OUINET_DIR_NAME,
                         uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
 
-def maybe_add_ouinet_dir_readme(output_dir):
-    _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME),
-                      OUINET_DIR_INFO)
-
 def data_path_from_data_mhash(data_mhash, output_dir):
     """Return the output path for a file with the given `data_mhash`.
 
@@ -109,10 +105,6 @@ def data_path_from_data_mhash(data_mhash, output_dir):
                               capture_output=True, check=True)
     b32_mhash = ipfs_cid.stdout.decode().strip()
     return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
-
-def maybe_add_data_dir_readme(output_dir):
-    _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME),
-                      DATA_DIR_INFO)
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -360,8 +352,8 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
     the format of output files in these directories.
     """
-    maybe_add_ouinet_dir_readme(output_dir)
-    maybe_add_data_dir_readme(output_dir)
+    _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME), OUINET_DIR_INFO)
+    _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), DATA_DIR_INFO)
 
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
     descp = desc_path_from_uri_hash(uri_hash, output_dir)
