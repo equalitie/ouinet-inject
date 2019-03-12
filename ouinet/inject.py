@@ -41,6 +41,30 @@ def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, OUINET_DIR_NAME,
                         uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
 
+def maybe_add_ouinet_dir_readme(output_dir):
+    ouinet_dir = os.path.join(output_dir, OUINET_DIR_NAME)
+    readme_path = os.path.join(ouinet_dir, 'readme.txt')
+    if os.path.exists(readme_path):
+        return
+    if not os.path.exists(ouinet_dir):
+        os.makedirs(ouinet_dir, exist_ok=True)
+    logger.debug("creating Ouinet directory readme")
+    with open(readme_path, 'w') as f:
+        f.write("""\
+This directory contains control data for reinserting URI content using a
+Ouinet client and the `ouinet-upload` tool.
+
+Please run `ouinet-upload` on the parent directory.
+
+For each injected URI the following files can be found, where `<XY><REST>` is
+the lower-case, hexadecimal SHA1 hash of the URI:
+
+  - `<XY>/<REST>.desc`: the Ouinet descriptor for the URI; the descriptor
+    contains the IPFS CID hash to content data (in the `%s` directory)
+
+  - `<XY>/<REST>.ins-<INDEX>`: insertion data for the URI on the given INDEX
+""" % DATA_DIR_NAME)
+
 def data_path_from_data_mhash(data_mhash, output_dir):
     """Return the output path for a file with the given `data_mhash`.
 
@@ -64,6 +88,31 @@ def data_path_from_data_mhash(data_mhash, output_dir):
                               capture_output=True, check=True)
     b32_mhash = ipfs_cid.stdout.decode().strip()
     return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
+
+def maybe_add_data_dir_readme(output_dir):
+    data_dir = os.path.join(output_dir, DATA_DIR_NAME)
+    readme_path = os.path.join(data_dir, 'readme.txt')
+    if os.path.exists(readme_path):
+        return
+    logger.debug("creating data directory readme")
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir, exist_ok=True)
+    with open(readme_path, 'w') as f:
+        f.write("""\
+This directory contains content data for seeding using a Ouinet client and
+`ouinet-upload`.  (You may also seed the files directly using IPFS.)
+
+Please run `ouinet-upload` on the parent directory.
+
+Each data file in `<XY>/<CID>`, where CID is the lower-case, Base32 IPFS CID
+(v1) hash of its contents, and XY are the next-to-last two characters of CID.
+
+To get the Base32 CID (v1) from the Base58 CID (v0) used by descriptors in the
+`%s` directory, use `ipfs cid base32 <Base58_CID>`.
+
+To get the Base58 CID (v0) from the Base32 CID (v1) used in this directory,
+use `ipfs cid format -v 0 -b base58btc <Base32_CID>`.
+""" % OUINET_DIR_NAME)
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -324,6 +373,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
+    maybe_add_ouinet_dir_readme(output_dir)
     desc_dir = os.path.dirname(descp)
     if not os.path.exists(desc_dir):
         os.makedirs(desc_dir, exist_ok=True)
@@ -339,6 +389,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     # Hard-link the data file (if not already there).
     # TODO: look for better options
     # TODO: handle exceptions
+    maybe_add_data_dir_readme(output_dir)
     out_data_path = data_path_from_data_mhash(data_mhash, output_dir)
     if not os.path.exists(out_data_path):
         out_data_dir = os.path.dirname(out_data_path)
