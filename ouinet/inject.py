@@ -31,6 +31,37 @@ DESC_FILE_EXT = '.desc'
 INS_FILE_EXT_PFX = '.ins-'
 DATA_DIR_NAME = 'ouinet-data'
 
+OUINET_DIR_INFO = """\
+This directory contains control data for reinserting URI content using a
+Ouinet client and the `ouinet-upload` tool.
+
+Please run `ouinet-upload` on the parent directory.
+
+For each injected URI the following files can be found, where `<XY><REST>` is
+the lower-case, hexadecimal SHA1 hash of the URI:
+
+  - `<XY>/<REST>.desc`: the Ouinet descriptor for the URI; the descriptor
+    contains the IPFS CID hash to content data (in the `%s` directory)
+
+  - `<XY>/<REST>.ins-<INDEX>`: insertion data for the URI on the given INDEX
+""" % DATA_DIR_NAME
+
+DATA_DIR_INFO = """\
+This directory contains content data for seeding using a Ouinet client and
+`ouinet-upload`.  (You may also seed the files directly using IPFS.)
+
+Please run `ouinet-upload` on the parent directory.
+
+Each data file in `<XY>/<CID>`, where CID is the lower-case, Base32 IPFS CID
+(v1) hash of its contents, and XY are the next-to-last two characters of CID.
+
+To get the Base32 CID (v1) from the Base58 CID (v0) used by descriptors in the
+`%s` directory, use `ipfs cid base32 <Base58_CID>`.
+
+To get the Base58 CID (v0) from the Base32 CID (v1) used in this directory,
+use `ipfs cid format -v 0 -b base58btc <Base32_CID>`.
+""" % OUINET_DIR_NAME
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,20 +83,8 @@ def desc_path_from_uri_hash(uri_hash, output_dir):
                         uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
 
 def maybe_add_ouinet_dir_readme(output_dir):
-    _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME), """\
-This directory contains control data for reinserting URI content using a
-Ouinet client and the `ouinet-upload` tool.
-
-Please run `ouinet-upload` on the parent directory.
-
-For each injected URI the following files can be found, where `<XY><REST>` is
-the lower-case, hexadecimal SHA1 hash of the URI:
-
-  - `<XY>/<REST>.desc`: the Ouinet descriptor for the URI; the descriptor
-    contains the IPFS CID hash to content data (in the `%s` directory)
-
-  - `<XY>/<REST>.ins-<INDEX>`: insertion data for the URI on the given INDEX
-""" % DATA_DIR_NAME)
+    _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME),
+                      OUINET_DIR_INFO)
 
 def data_path_from_data_mhash(data_mhash, output_dir):
     """Return the output path for a file with the given `data_mhash`.
@@ -92,21 +111,8 @@ def data_path_from_data_mhash(data_mhash, output_dir):
     return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
 
 def maybe_add_data_dir_readme(output_dir):
-    _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), """\
-This directory contains content data for seeding using a Ouinet client and
-`ouinet-upload`.  (You may also seed the files directly using IPFS.)
-
-Please run `ouinet-upload` on the parent directory.
-
-Each data file in `<XY>/<CID>`, where CID is the lower-case, Base32 IPFS CID
-(v1) hash of its contents, and XY are the next-to-last two characters of CID.
-
-To get the Base32 CID (v1) from the Base58 CID (v0) used by descriptors in the
-`%s` directory, use `ipfs cid base32 <Base58_CID>`.
-
-To get the Base58 CID (v0) from the Base32 CID (v1) used in this directory,
-use `ipfs cid format -v 0 -b base58btc <Base32_CID>`.
-""" % OUINET_DIR_NAME)
+    _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME),
+                      DATA_DIR_INFO)
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -287,7 +293,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     The HTTP response head will be processed, thus the head in the resulting
     descriptor may differ from that in the ``.http-rph`` file.
 
-    TODO: describe output files
+    See `save_uri_injection()` for the format of output files in `output_dir`.
     """
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
@@ -353,6 +359,9 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
 
     This is only done if insertion data is not already present for the `uri`
     in `output_dir`.
+
+    See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
+    the format of output files in `output_dir`.
     """
     maybe_add_ouinet_dir_readme(output_dir)
     maybe_add_data_dir_readme(output_dir)
