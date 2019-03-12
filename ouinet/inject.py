@@ -34,6 +34,16 @@ DATA_DIR_NAME = 'ouinet-data'
 logger = logging.getLogger(__name__)
 
 
+def _maybe_add_readme(readme_dir, text):
+    readme_path = os.path.join(readme_dir, 'readme.txt')
+    if os.path.exists(readme_path):
+        return
+    logger.debug("creating readme: %s", readme_path)
+    if not os.path.exists(readme_dir):
+        os.makedirs(readme_dir, exist_ok=True)
+    with open(readme_path, 'w') as f:
+        f.write(text)
+
 def desc_path_from_uri_hash(uri_hash, output_dir):
     # The splitting mimics that of Git object storage:
     # we use the initial two digits since
@@ -42,15 +52,7 @@ def desc_path_from_uri_hash(uri_hash, output_dir):
                         uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
 
 def maybe_add_ouinet_dir_readme(output_dir):
-    ouinet_dir = os.path.join(output_dir, OUINET_DIR_NAME)
-    readme_path = os.path.join(ouinet_dir, 'readme.txt')
-    if os.path.exists(readme_path):
-        return
-    if not os.path.exists(ouinet_dir):
-        os.makedirs(ouinet_dir, exist_ok=True)
-    logger.debug("creating Ouinet directory readme")
-    with open(readme_path, 'w') as f:
-        f.write("""\
+    _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME), """\
 This directory contains control data for reinserting URI content using a
 Ouinet client and the `ouinet-upload` tool.
 
@@ -90,15 +92,7 @@ def data_path_from_data_mhash(data_mhash, output_dir):
     return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
 
 def maybe_add_data_dir_readme(output_dir):
-    data_dir = os.path.join(output_dir, DATA_DIR_NAME)
-    readme_path = os.path.join(data_dir, 'readme.txt')
-    if os.path.exists(readme_path):
-        return
-    logger.debug("creating data directory readme")
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir, exist_ok=True)
-    with open(readme_path, 'w') as f:
-        f.write("""\
+    _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), """\
 This directory contains content data for seeding using a Ouinet client and
 `ouinet-upload`.  (You may also seed the files directly using IPFS.)
 
