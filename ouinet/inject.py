@@ -311,28 +311,49 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                                meta_http_rph=http_rph)
 
 def inject_warc(warc_file, output_dir, bep44_priv_key=None):
+    seen_get_resp = {}  # WARC record ID -> (URI, HTTP head, body) or None
     for record in warcio.archiveiterator.WARCIterator(warc_file):
+        if not record.http_headers:
+            continue  # only handle HTTP insertion for the moment
+
         # According to
         # <https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#warc-target-uri>,
         # response entries must have a ``WARC-Target-URI`` header with the exchange URI.
         # Since the only thing we need from the request is the URI,
-        # we can safely ignore request records and avoid the extra effort of
-        # linking requests and responses through `WARC-Concurrent-To` and `WARC-Record-ID` headers.
-        if record.rec_type != 'response':
-            continue
+        # we could only process response records,
+        # however we still need to see the request to ensure it was a GET.
 
-        uri = record.rec_headers.get_header('WARC-Target-URI')
-        if not record.http_headers:
-            logger.warning("skipping URI with missing HTTP response head: %s", uri)
-            continue  # only handle HTTP insertion for the moment
-        http_rph = record.http_headers.to_str()
-        bodyf = record.raw_stream  # be consistent with ``Content-Encoding``
+        if record.rec_type == 'response':
+            # We need to read body data fully now,
+            # since advancing to the next record exhausts it.
+            uri = record.rec_headers.get_header('WARC-Target-URI')
+            http_rph = record.http_headers.to_str()
+            body = record.raw_stream.read()  # be consistent with ``Content-Encoding``
+
+            resp_id = record.rec_headers.get_header('WARC-Record-ID')
+            if resp_id not in seen_get_resp:
+                seen_get_resp[resp_id] = (uri, http_rph, body)  # delay until GET confirmation
+                continue
+            # GET previously confirmed, proceed.
+            del seen_get_resp[resp_id]
+
+        elif record.rec_type == 'request' and record.http_headers.protocol == 'GET':
+            resp_id = record.rec_headers.get_header('WARC-Concurrent-To')
+            if resp_id not in seen_get_resp:
+                seen_get_resp[resp_id] = None  # confirm GET, pending response
+                continue
+            # GET confirmed, pop out response info and process it.
+            (uri, http_rph, body) = seen_get_resp.pop(resp_id)
+
+        else:  # ignore other kinds of records
+            continue
 
         # Extract body data to a temporary file in the output directory,
         # so that it can be safely hard-linked into the data directory.
         if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=output_dir, delete=True) as dataf:
+            bodyf = io.BytesIO(body)
             shutil.copyfileobj(bodyf, dataf)
             dataf.flush()
 
@@ -340,6 +361,8 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             save_uri_injection(uri, datap, output_dir,
                                bep44_priv_key=bep44_priv_key,
                                meta_http_rph=http_rph)
+
+    logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
 def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
