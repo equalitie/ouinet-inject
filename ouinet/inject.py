@@ -328,7 +328,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             # since advancing to the next record exhausts it.
             uri = record.rec_headers.get_header('WARC-Target-URI')
             http_rph = record.http_headers.to_str()
-            body = record.raw_stream.read()  # be consistent with ``Content-Encoding``
+            body = record.raw_stream.read()  # be consistent with content and transfer encoding
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
             if resp_id not in seen_get_resp:
