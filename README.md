@@ -12,8 +12,8 @@ BEP44 distributed cache index are supported.
 
 ## Input
 
-The only content supported at the moment are HTTP exchanges consisting of a
-request and a response made of an HTTP response head and body.  These can be
+The only content supported at the moment are HTTP GET exchanges consisting of
+a request and a response made of an HTTP response head and body.  These can be
 provided either via a WARC file (e.g. coming from web crawling) or using an ad
 hoc file-based format.
 

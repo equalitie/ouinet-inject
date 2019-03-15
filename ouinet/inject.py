@@ -266,18 +266,18 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     Limitations:
 
     - Only a single injection per URI is supported.
-    - Only injection of HTTP exchanges is supported.
+    - Only injection of HTTP GET exchanges is supported.
 
     For each injection to be performed for a given URI,
     somewhere under `input_dir` there must exist:
 
     - ``NAME.uri`` with the URI itself; the ``NAME`` is not relevant
-    - ``NAME.http-rph`` with the head of the HTTP response
-    - ``NAME.data`` with the body of the HTTP response
+    - ``NAME.http-rph`` with the head of the HTTP GET response
+    - ``NAME.data`` with the body of the HTTP GET response
       (after transfer decoding if a non-identity transfer encoding was used)
 
-    The HTTP response head will be processed, thus the head in the resulting
-    descriptor may differ from that in the ``.http-rph`` file.
+    The HTTP GET response head will be processed, thus the head in
+    the resulting descriptor may differ from that in the ``.http-rph`` file.
 
     See `save_uri_injection()` for more information on
     the storage of injections in `output_dir`.
