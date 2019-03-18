@@ -21,6 +21,8 @@ import bencoder
 import nacl.encoding
 import nacl.signing
 import warcio.archiveiterator
+import warcio.bufferedreaders as _warcbuf
+import warcio.statusandheaders as _warchead
 
 
 OUINET_DIR_NAME = '.ouinet'
@@ -282,6 +284,8 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     See `save_uri_injection()` for more information on
     the storage of injections in `output_dir`.
     """
+    http_parse = _warchead.StatusAndHeadersParser(['HTTP/1.0', 'HTTP/1.1']).parse
+
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
         for fn in filenames:
@@ -304,11 +308,40 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
 
             with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
                 uri = urif.read().decode()  # only ASCII, RFC 3986#1.2.1
-                http_rph = http_rphf.read().decode('iso-8859-1')  # RFC 7230#3.2.4
+                http_headers = http_parse(http_rphf)
 
-            save_uri_injection(uri, datap, output_dir,
-                               bep44_priv_key=bep44_priv_key,
-                               meta_http_rph=http_rph)
+            # We use the identity-encoded body to
+            # make it self-standing and more amenable to seeding in other systems.
+            norm = lambda enc: None if (not enc or enc == 'identity') else enc
+            txenc = norm((http_headers.get_header('Transfer-Encoding') or '').lower())
+            ctenc = norm((http_headers.get_header('Content-Encoding') or '').lower())
+            http_headers.remove_header('Transfer-Encoding')
+            http_headers.remove_header('Content-Encoding')
+
+            # Trivial case, no decoding needed.
+            if not txenc and not ctenc:
+                save_uri_injection(uri, datap, output_dir,
+                                   bep44_priv_key=bep44_priv_key,
+                                   meta_http_rph=http_headers.to_str())
+                continue
+
+            # Extract body data to a temporary file in the output directory,
+            # so that it can be safely hard-linked into the data directory.
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=output_dir, delete=True) as dataf:
+                with open(datap, 'rb') as bodyf:
+                    if txenc == 'chunked':
+                        bodyf = _warcbuf.ChunkedDataReader(bodyf, decomp_type=ctenc)
+                    elif ctenc in _warcbuf.BufferedReader.get_supported_decompressors():
+                        bodyf = _warcbuf.BufferedReader(bodyf, decomp_type=ctenc)
+                    shutil.copyfileobj(bodyf, dataf)
+                    dataf.flush()
+
+                datap = os.path.join(output_dir, dataf.name)
+                save_uri_injection(uri, datap, output_dir,
+                                   bep44_priv_key=bep44_priv_key,
+                                   meta_http_rph=http_headers.to_str())
 
 def inject_warc(warc_file, output_dir, bep44_priv_key=None):
     seen_get_resp = {}  # WARC record ID -> (URI, HTTP head, body) or None
