@@ -375,7 +375,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     in `output_dir`.
 
     Control data is stored under `OUINET_DIR_NAME` in `ouinet_dir`,
-    and content data is stored under `DATA_DIR_NAME` in `ouinet_dir`.
+    and content data is hard-linked under `DATA_DIR_NAME` in `ouinet_dir`.
     See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
     the format of output files in these directories.
     """
