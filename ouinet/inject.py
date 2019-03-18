@@ -339,6 +339,8 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                     dataf.flush()
 
                 datap = os.path.join(output_dir, dataf.name)
+                # Use length of identity-encoded data.
+                http_headers.replace_header('Content-Length', str(os.stat(datap).st_size))
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
                                    meta_http_rph=http_headers.to_str())
@@ -365,6 +367,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             body = record.content_stream().read()
             record.http_headers.remove_header('Transfer-Encoding')
             record.http_headers.remove_header('Content-Encoding')
+            record.http_headers.replace_header('Content-Length', str(len(body)))
             http_rph = record.http_headers.to_str()
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
