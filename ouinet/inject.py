@@ -326,9 +326,13 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
         if record.rec_type == 'response':
             # We need to read body data fully now,
             # since advancing to the next record exhausts it.
+            # We also use the identity-encoded body to
+            # make it self-standing and more amenable to seeding in other systems.
             uri = record.rec_headers.get_header('WARC-Target-URI')
+            body = record.content_stream().read()
+            record.http_headers.remove_header('Transfer-Encoding')
+            record.http_headers.remove_header('Content-Encoding')
             http_rph = record.http_headers.to_str()
-            body = record.raw_stream.read()  # be consistent with content and transfer encoding
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
             if resp_id not in seen_get_resp:
