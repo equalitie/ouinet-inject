@@ -72,8 +72,7 @@ def _maybe_add_readme(readme_dir, text):
     if os.path.exists(readme_path):
         return
     logger.debug("creating readme: %s", readme_path)
-    if not os.path.exists(readme_dir):
-        os.makedirs(readme_dir, exist_ok=True)
+    os.makedirs(readme_dir, exist_ok=True)
     with open(readme_path, 'w') as f:
         f.write(text)
 
@@ -327,8 +326,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
 
             # Extract body data to a temporary file in the output directory,
             # so that it can be safely hard-linked into the data directory.
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir, exist_ok=True)
+            os.makedirs(output_dir, exist_ok=True)
             with tempfile.NamedTemporaryFile(dir=output_dir, delete=True) as dataf:
                 with open(datap, 'rb') as bodyf:
                     if txenc == 'chunked':
@@ -403,8 +401,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
 
         # Extract body data to a temporary file in the output directory,
         # so that it can be safely hard-linked into the data directory.
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=output_dir, delete=True) as dataf:
             bodyf = io.BytesIO(body)
             shutil.copyfileobj(bodyf, dataf)
@@ -445,8 +442,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
     desc_dir = os.path.dirname(descp)
-    if not os.path.exists(desc_dir):
-        os.makedirs(desc_dir, exist_ok=True)
+    os.makedirs(desc_dir, exist_ok=True)
     with open(descp, 'wb') as descf:
         logger.debug("writing descriptor: uri_hash=%s", uri_hash)
         descf.write(desc_data)
@@ -462,8 +458,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     out_data_path = data_path_from_data_mhash(data_mhash, output_dir)
     if not os.path.exists(out_data_path):
         out_data_dir = os.path.dirname(out_data_path)
-        if not os.path.exists(out_data_dir):
-            os.makedirs(out_data_dir, exist_ok=True)
+        os.makedirs(out_data_dir, exist_ok=True)
         logger.debug("linking data file: uri_hash=%s", uri_hash)
         os.link(data_path, out_data_path)
 
