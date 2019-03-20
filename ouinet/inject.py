@@ -346,7 +346,13 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                                    meta_http_rph=http_headers.to_str())
 
 def inject_warc(warc_file, output_dir, bep44_priv_key=None):
+    # For marking GET requests pointed to by responses.
+    seen_get_req = set()
+    # For marking responses pointed to by GET requests.
     seen_get_resp = {}  # WARC record ID -> (URI, HTTP head, body) or None
+    # These assume at most one ``WARC-Concurrent-To`` per request or response
+    # (plus warcio only supports accessing one such header).
+
     for record in warcio.archiveiterator.WARCIterator(warc_file):
         if not record.http_headers:
             continue  # only handle HTTP insertion for the moment
@@ -371,14 +377,21 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             http_rph = record.http_headers.to_str()
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
-            if resp_id not in seen_get_resp:
+            req_id = record.rec_headers.get_header('WARC-Concurrent-To')
+            if req_id in seen_get_req:
+                seen_get_req.remove(req_id)
+            elif resp_id not in seen_get_resp:
                 seen_get_resp[resp_id] = (uri, http_rph, body)  # delay until GET confirmation
                 continue
             # GET previously confirmed, proceed.
-            del seen_get_resp[resp_id]
+            seen_get_resp.pop(resp_id, None)
 
         elif record.rec_type == 'request' and record.http_headers.protocol == 'GET':
+            req_id = record.rec_headers.get_header('WARC-Record-ID')
             resp_id = record.rec_headers.get_header('WARC-Concurrent-To')
+            if not resp_id:
+                seen_get_req.add(req_id)  # mark as GET, later response may point to it
+                continue
             if resp_id not in seen_get_resp:
                 seen_get_resp[resp_id] = None  # confirm GET, pending response
                 continue
