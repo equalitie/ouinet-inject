@@ -167,7 +167,10 @@ def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
         '!ouinet_version': 0,
         'url': canonical_uri,
         'id': str(uuid.uuid4()),
-        'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        # The ``.000000`` is a work around a Boost limitation in date parsing
+        # where microsecond precision in extended ISO dates is compulsory.
+        # That limitation affects insertion in the Ouinet client.
+        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', time.gmtime()),
         'head': meta_http_rph,
         'body_link': data_ipfs_cid,
     }
