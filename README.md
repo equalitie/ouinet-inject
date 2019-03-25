@@ -46,9 +46,13 @@ new injections to it without overwriting or deleting existing files.
 ## Setup
 
 Installation of the package is not yet supported, but you can install its
-dependencies with:
+Python dependencies with:
 
     $ pip install -r requirements.txt
+
+You will also need to have the ``ipfs`` binary on your search path.  Please
+note that it will only be used for some hash computations and that neither a
+running IPFS daemon nor connection to the Internet is needed.
 
 ## Usage
 
