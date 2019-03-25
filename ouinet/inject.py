@@ -103,7 +103,7 @@ def data_path_from_data_mhash(data_mhash, output_dir):
     # though our hashes are for the whole file and not just for blocks.
     ipfs_cid = subprocess.run(['ipfs', 'cid', 'base32'],
                               input=data_mhash.encode(),
-                              capture_output=True, check=True)
+                              stdout=subprocess.PIPE, check=True)
     b32_mhash = ipfs_cid.stdout.decode().strip()
     return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
 
@@ -187,7 +187,7 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
     # The daemon need not be running.
     # We may want to instead use native Python packages for this.
     ipfs_add = subprocess.run(['ipfs', 'add', '-qn', data_path],
-                              capture_output=True, check=True)
+                              stdout=subprocess.PIPE, check=True)
     data_ipfs_cid = ipfs_add.stdout.decode().strip()
     desc = descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
     return (desc, data_ipfs_cid)
@@ -248,7 +248,8 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     # Serialize the descriptor for index insertion.
     desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
     ipfs_add = subprocess.run(['ipfs', 'add', '-qn'],
-                              input=desc_data, capture_output=True, check=True)
+                              input=desc_data,
+                              stdout=subprocess.PIPE, check=True)
     desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
     desc_inline = b'/zlib/' + zlib.compress(desc_data)
 
