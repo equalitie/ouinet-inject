@@ -126,6 +126,7 @@ _cache_http_response_headers = [
     'Content-Length',
     'Content-Type',
     'Date',
+    'Digest',
     'Etag',
     'Expires',
     'Last-Modified',
