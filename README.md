@@ -10,8 +10,8 @@ offline injection of content for later insertion into
 For the moment only BitTorrent BEP44 keys for signing insertions into Ouinet's
 BEP44 distributed cache index are supported.
 
-If you are running a Ouinet injector, you may use the ``bep44-private-key``
-and ``bep44-public-key`` files present in its repository directory.
+If you are running a Ouinet injector, you may use the ``ed25519-private-key``
+and ``ed25519-public-key`` files present in its repository directory.
 
 ## Input
 
