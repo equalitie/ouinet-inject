@@ -77,12 +77,11 @@ def _maybe_add_readme(readme_dir, text):
     with open(readme_path, 'w') as f:
         f.write(text)
 
-def desc_path_from_uri_hash(uri_hash, output_dir):
+def inj_prefix_from_uri_hash(uri_hash, output_dir):
     # The splitting mimics that of Git object storage:
     # we use the initial two digits since
     # with SHA1 all bytes vary more or less uniformly.
-    return os.path.join(output_dir, OUINET_DIR_NAME,
-                        uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
+    return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash[:2], uri_hash[2:])
 
 def data_path_from_data_digest(data_digest, output_dir):
     """Return the output path for a file with the given `data_digest`.
@@ -451,7 +450,8 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), DATA_DIR_INFO)
 
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
-    descp = desc_path_from_uri_hash(uri_hash, output_dir)
+    inj_prefix = inj_prefix_from_uri_hash(uri_hash, output_dir)
+    descp = inj_prefix + DESC_FILE_EXT
     if os.path.exists(descp):
         logger.info("skipping URI with existing descriptor: %s", uri)
         return  # a descriptor for the URI already exists
@@ -468,9 +468,8 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     with open(descp, 'wb') as descf:
         logger.debug("writing descriptor: uri_hash=%s", uri_hash)
         descf.write(desc_data)
-    desc_prefix = os.path.splitext(descp)[0]
     for (idx, idx_inj_data) in inj_data.items():
-        with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
+        with open(inj_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
             logger.debug("writing insertion data (%s): uri_hash=%s", idx, uri_hash)
             injf.write(idx_inj_data)
 
