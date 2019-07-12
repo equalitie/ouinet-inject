@@ -363,7 +363,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
 
                 datap = os.path.join(output_dir, dataf.name)
                 # Use length of identity-encoded data.
-                http_headers.replace_header('Content-Length', str(os.stat(datap).st_size))
+                http_headers.replace_header('Content-Length', str(os.path.getsize(datap)))
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
                                    meta_http_rph=http_headers)
