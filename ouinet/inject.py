@@ -3,6 +3,7 @@
 """
 
 import argparse
+import base64
 import hashlib
 import http.client
 import io
@@ -177,6 +178,26 @@ def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
     }
     return desc
 
+def _b64digest_file(hash, path):
+    """Return a Base64-encoded `hash` digest of the file at `path`.
+
+    >>> import hashlib
+    >>> import tempfile
+    >>> with tempfile.NamedTemporaryFile() as tf:
+    >>>     tf.write(b'<!DOCTYPE html>\n<p>Tiny body here!</p>')
+    >>>     tf.flush()
+    >>>     print(_b64digest_file(hashlib.sha256, tf.name))
+    j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
+    """
+    buf = bytearray(4096)
+    h = hash()
+    with open(path, 'rb') as f:
+        l = f.readinto(buf)
+        while l:
+            h.update(buf[:l])
+            l = f.readinto(buf)
+    return base64.b64encode(h.digest()).decode()
+
 def descriptor_from_file(canonical_uri, data_path, **kwargs):
     """Returns the descriptor and a hash of the data.
 
@@ -191,6 +212,13 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
                               stdout=subprocess.PIPE, check=True)
     data_ipfs_cid = ipfs_add.stdout.decode().strip()
     desc = descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
+
+    # These are not part of the descriptor v0 spec,
+    # they are added to ease tools locate body data files.
+    desc['body_size'] = os.path.getsize(data_path)
+    desc['body_digest'] = data_digest = (
+        'SHA-256=' + _b64digest_file(hashlib.sha256, data_path))
+
     return (desc, data_ipfs_cid)
 
 def index_key_from_http_url(canonical_url):
