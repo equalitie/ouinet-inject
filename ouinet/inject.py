@@ -4,6 +4,7 @@
 
 import argparse
 import base64
+import codecs
 import hashlib
 import http.client
 import io
@@ -55,14 +56,14 @@ This directory contains content data for seeding using a Ouinet client and
 
 Please run `ouinet-upload` on the parent directory.
 
-Each data file in `<XY>/<CID>`, where CID is the lower-case, Base32 IPFS CID
-(v1) hash of its contents, and XY are the next-to-last two characters of CID.
+Each data file is `<XY>/<REST>`, where `<XY><REST>` is the lower-case,
+hexadecimal SHA-256 hash of its contents.
 
-To get the Base32 CID (v1) from the Base58 CID (v0) used by descriptors in the
-`%s` directory, use `ipfs cid base32 <Base58_CID>`.
+To get the hexadecimal hash from the Base64 one used by descriptors in the
+`%s` directory, use:
 
-To get the Base58 CID (v0) from the Base32 CID (v1) used in this directory,
-use `ipfs cid format -v 0 -b base58btc <Base32_CID>`.
+    echo 'SHA-256=...' | cut -d= -f2- | base64 -d | hexdump -e '/1 "%%02x"'
+
 """ % OUINET_DIR_NAME
 
 logger = logging.getLogger(__name__)
@@ -84,29 +85,21 @@ def desc_path_from_uri_hash(uri_hash, output_dir):
     return os.path.join(output_dir, OUINET_DIR_NAME,
                         uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
 
-def data_path_from_data_mhash(data_mhash, output_dir):
-    """Return the output path for a file with the given `data_mhash`.
+def data_path_from_data_digest(data_digest, output_dir):
+    """Return the output path for a file with the given `data_digest`.
 
-    >>> mhash = 'QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH'
-    >>> data_path_from_data_mhash(mhash, '.').split(os.path.sep)
-    ['.', 'data', 'b4', 'bafybeif7ztnhq65lumvvtr4ekcwd2ifwgm3awq4zfr3srh462rwyinlb4y']
+    >>> import base64
+    >>> b64digest = b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
+    >>> digest = base64.b64decode(b64digest)
+    >>> data_path_from_data_digest(digest, '.').split(os.path.sep)
+    ['.', 'data', 'e3', 'b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']
     """
     # The hash above is for an empty (zero-length) file.
     #
-    # Use a Base32 hash since it is case-insensitive,
+    # Use an hexadecimal hash since it is case-insensitive,
     # so we avoid collisions on platforms like Windows.
-    #
-    # Also, since ASCII-encoded multihashes have prefix bytes indicating things like
-    # the encoding base, hash function code, hash size etc.,
-    # we prefer end digits for the parent directory,
-    # but not the last one since it may be affected by padding.
-    # The [-3:-1] digits are used as in IPFS v7 repository format,
-    # though our hashes are for the whole file and not just for blocks.
-    ipfs_cid = subprocess.run(['ipfs', 'cid', 'base32'],
-                              input=data_mhash.encode(),
-                              stdout=subprocess.PIPE, check=True)
-    b32_mhash = ipfs_cid.stdout.decode().strip()
-    return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
+    hex_digest = codecs.encode(data_digest, 'hex').decode()
+    return os.path.join(output_dir, DATA_DIR_NAME, hex_digest[:2], hex_digest[2:])
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -183,12 +176,10 @@ def _digest_file(hash, path):
 
     >>> import hashlib
     >>> import tempfile
-    >>> with tempfile.NamedTemporaryFile() as tf:
-    >>>     tf.write(b'<!DOCTYPE html>\n<p>Tiny body here!</p>')
-    >>>     tf.flush()
+    >>> with tempfile.NamedTemporaryFile() as tf:  # empty
     >>>     digest = _digest_file(hashlib.sha256, tf.name)
     >>>     print(base64.b64encode(digest))
-    b'j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w='
+    b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
     """
     buf = bytearray(4096)
     h = hash()
@@ -200,10 +191,9 @@ def _digest_file(hash, path):
     return h.digest()
 
 def descriptor_from_file(canonical_uri, data_path, **kwargs):
-    """Returns the descriptor and a hash of the data.
+    """Returns the descriptor and a digest of the data.
 
-    The descriptor is a mapping.  The hash is a string containing
-    the ASCII-encoded multihash provided by IPFS.
+    The descriptor is a mapping.  The digest is a byte string.
     """
 
     # This only computes and returns the CID, without seeding.
@@ -220,7 +210,7 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
     desc['body_size'] = os.path.getsize(data_path)
     desc['body_digest'] = 'SHA-256=' + base64.b64encode(data_digest).decode()
 
-    return (desc, data_ipfs_cid)
+    return (desc, data_digest)
 
 def index_key_from_http_url(canonical_url):
     return canonical_url
@@ -265,7 +255,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     """Create descriptor and insertion data for the injection of the `uri`.
 
     A tuple is returned with the serialized descriptor (as bytes),
-    a multihash of the data (as a string),
+    a digest of the data (as bytes),
     and a dictionary mapping the different index names to
     their respective serialized insertion data (as bytes).
     """
@@ -273,7 +263,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     # Generate the descriptor.
     curi = get_canonical_uri(uri)
     logger.debug("creating descriptor for URI: %s", curi)
-    (desc, data_mhash) = descriptor_from_file(curi, data_path, **kwargs)
+    (desc, data_digest) = descriptor_from_file(curi, data_path, **kwargs)
 
     # Serialize the descriptor for index insertion.
     desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
@@ -290,7 +280,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
         logger.debug("creating BEP44 insertion data for URI: %s", curi)
         ins_data['bep44'] = bep44_insert(index_key, desc_link, desc_inline, bep44_priv_key)
 
-    return (desc_data, data_mhash, ins_data)
+    return (desc_data, data_digest, ins_data)
 
 def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
@@ -469,7 +459,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
         return  # a descriptor for the URI already exists
 
     # After all the previous checks, proceed to the real injection.
-    (desc_data, data_mhash, inj_data) = inject_uri(
+    (desc_data, data_digest, inj_data) = inject_uri(
         uri, data_path, bep44_priv_key=bep44_priv_key, **kwargs
     )
 
@@ -489,7 +479,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     # Hard-link the data file (if not already there).
     # TODO: look for better options
     # TODO: handle exceptions
-    out_data_path = data_path_from_data_mhash(data_mhash, output_dir)
+    out_data_path = data_path_from_data_digest(data_digest, output_dir)
     if not os.path.exists(out_data_path):
         out_data_dir = os.path.dirname(out_data_path)
         os.makedirs(out_data_dir, exist_ok=True)
