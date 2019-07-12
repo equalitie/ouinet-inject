@@ -153,31 +153,13 @@ def process_http_response(resp_str):
     out_rp_str += '\r\n'
     return out_rp_str
 
-def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
-    # v0 descriptors only support HTTP exchanges,
-    # with compulsory response head metadata,
-    # and a single IPFS CID pointing to the body.
-    meta_http_rph = process_http_response(kwargs['meta_http_rph'])
-    desc = {
-        '!ouinet_version': 0,
-        'url': canonical_uri,
-        'id': str(uuid.uuid4()),
-        # The ``.000000`` is a work around a Boost limitation in date parsing
-        # where microsecond precision in extended ISO dates is compulsory.
-        # That limitation affects insertion in the Ouinet client.
-        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', time.gmtime()),
-        'head': meta_http_rph,
-        'body_link': data_ipfs_cid,
-    }
-    return desc
-
-def _digest_file(hash, path):
+def _digest_from_path(hash, path):
     """Return the `hash` digest of the file at `path`.
 
     >>> import hashlib
     >>> import tempfile
     >>> with tempfile.NamedTemporaryFile() as tf:  # empty
-    >>>     digest = _digest_file(hashlib.sha256, tf.name)
+    >>>     digest = _digest_from_path(hashlib.sha256, tf.name)
     >>>     print(base64.b64encode(digest))
     b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
     """
@@ -190,27 +172,37 @@ def _digest_file(hash, path):
             l = f.readinto(buf)
     return h.digest()
 
-def descriptor_from_file(canonical_uri, data_path, **kwargs):
-    """Returns the descriptor and a digest of the data.
-
-    The descriptor is a mapping.  The digest is a byte string.
-    """
-
+def _ipfs_cid_from_path(path):
     # This only computes and returns the CID, without seeding.
     # The daemon need not be running.
     # We may want to instead use native Python packages for this.
-    ipfs_add = subprocess.run(['ipfs', 'add', '-qn', data_path],
+    ipfs_add = subprocess.run(['ipfs', 'add', '-qn', path],
                               stdout=subprocess.PIPE, check=True)
-    data_ipfs_cid = ipfs_add.stdout.decode().strip()
-    desc = descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
+    return ipfs_add.stdout.decode().strip()
 
-    # These are not part of the descriptor v0 spec,
-    # they are added to ease tools locate body data files.
-    data_digest = _digest_file(hashlib.sha256, data_path)
-    desc['body_size'] = os.path.getsize(data_path)
-    desc['body_digest'] = 'SHA-256=' + base64.b64encode(data_digest).decode()
+def descriptor_from_injection(inj):
+    """Returns the descriptor for a given injection (as a mapping)."""
+    # v0 descriptors only support HTTP exchanges,
+    # with compulsory response head metadata,
+    # and a single IPFS CID pointing to the body.
+    meta_http_rph = process_http_response(inj.meta_http_rph)
+    desc = {
+        '!ouinet_version': 0,
+        'url': inj.uri,
+        'id': inj.id,
+        # The ``.000000`` is a work around a Boost limitation in date parsing
+        # where microsecond precision in extended ISO dates is compulsory.
+        # That limitation affects insertion in the Ouinet client.
+        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', inj.ts),
+        'head': meta_http_rph,
+        'body_link': inj.data_ipfs_cid,
 
-    return (desc, data_digest)
+        # These are not part of the descriptor v0 spec,
+        # they are added to ease tools locate body data files.
+        'body_size': inj.data_size,
+        'body_digest': inj.data_digest,
+    }
+    return desc
 
 def index_key_from_http_url(canonical_url):
     return canonical_url
@@ -251,6 +243,9 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
 def get_canonical_uri(uri):
     return uri  # TODO
 
+class Injection:
+    pass  # just a dummy container
+
 def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     """Create descriptor and insertion data for the injection of the `uri`.
 
@@ -260,10 +255,21 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     their respective serialized insertion data (as bytes).
     """
 
+    # Prepare the injection.
+    inj = Injection()
+    inj.uri = get_canonical_uri(uri)
+    inj.id = str(uuid.uuid4())
+    inj.ts = time.gmtime()
+    inj.data_size = os.path.getsize(data_path)
+    data_digest = _digest_from_path(hashlib.sha256, data_path)
+    inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
+    inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
+    for (k, v) in kwargs.items():  # other stuff like metadata
+        setattr(inj, k, v)
+
     # Generate the descriptor.
-    curi = get_canonical_uri(uri)
-    logger.debug("creating descriptor for URI: %s", curi)
-    (desc, data_digest) = descriptor_from_file(curi, data_path, **kwargs)
+    logger.debug("creating descriptor for URI: %s", inj.uri)
+    desc = descriptor_from_injection(inj)
 
     # Serialize the descriptor for index insertion.
     desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
@@ -274,10 +280,10 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     desc_inline = b'/zlib/' + zlib.compress(desc_data)
 
     # Prepare insertion of the descriptor into indexes.
-    index_key = index_key_from_http_url(curi)
+    index_key = index_key_from_http_url(inj.uri)
     ins_data = {}
     if bep44_priv_key:
-        logger.debug("creating BEP44 insertion data for URI: %s", curi)
+        logger.debug("creating BEP44 insertion data for URI: %s", inj.uri)
         ins_data['bep44'] = bep44_insert(index_key, desc_link, desc_inline, bep44_priv_key)
 
     return (desc_data, data_digest, ins_data)
