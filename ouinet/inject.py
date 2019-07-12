@@ -436,7 +436,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
-def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs):
+def save_uri_injection(uri, data_path, output_dir, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
 
     This is only done if insertion data is not already present for the `uri`
@@ -458,7 +458,7 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
 
     # After all the previous checks, proceed to the real injection.
     (desc_data, data_digest, inj_data) = inject_uri(
-        uri, data_path, bep44_priv_key=bep44_priv_key, **kwargs
+        uri, data_path, **kwargs
     )
 
     # Write descriptor and insertion data to the output directory.
