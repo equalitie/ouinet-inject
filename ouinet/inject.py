@@ -6,7 +6,6 @@ import argparse
 import base64
 import codecs
 import hashlib
-import http.client
 import io
 import json
 import logging
@@ -133,22 +132,15 @@ _cache_http_response_headers = [
     'Warning',
 ]
 
-def process_http_response(resp_str):
-    """Return a filtered version of `resp_str` as another response string."""
-
-    # Parse response head from string.
-    rpf = io.BytesIO(resp_str.encode('iso-8859-1'))  # RFC 7230#3.2.4
-    rpf.makefile = lambda *a, **k: rpf  # monkey-patch as a socket
-    rp = http.client.HTTPResponse(rpf)
-    rp.begin()
+def process_http_response(rp):
+    """Return a filtered version of `rp` as a response string."""
 
     # Build a new response head string with selected headers.
-    v = int(rp.version)
-    version = 'HTTP/%d.%d' % (v // 10, v % 10)
-    out_rp_str = '%s %s %s\r\n' % (version, rp.status, rp.reason)
+    out_rp_str = '%s %s\r\n' % (rp.protocol, rp.statusline)
     for hdrn in _cache_http_response_headers:
-        hdrv = rp.getheader(hdrn)  # concatenates repeated headers
-        if hdrv is not None:
+        hdrn_lc = hdrn.lower()  # concatenate repeated headers
+        hdrv = ', '.join(v for (h, v) in rp.headers if h.lower() == hdrn_lc)
+        if hdrv:
             out_rp_str += '%s: %s\r\n' % (hdrn, hdrv)
     out_rp_str += '\r\n'
     return out_rp_str
@@ -351,7 +343,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             if not txenc and not ctenc:
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
-                                   meta_http_rph=http_headers.to_str())
+                                   meta_http_rph=http_headers)
                 continue
 
             # Extract body data to a temporary file in the output directory,
@@ -371,7 +363,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                 http_headers.replace_header('Content-Length', str(os.stat(datap).st_size))
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
-                                   meta_http_rph=http_headers.to_str())
+                                   meta_http_rph=http_headers)
 
 def inject_warc(warc_file, output_dir, bep44_priv_key=None):
     # For marking GET requests pointed to by responses.
@@ -402,7 +394,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             record.http_headers.remove_header('Transfer-Encoding')
             record.http_headers.remove_header('Content-Encoding')
             record.http_headers.replace_header('Content-Length', str(len(body)))
-            http_rph = record.http_headers.to_str()
+            http_rph = record.http_headers
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
             req_id = record.rec_headers.get_header('WARC-Concurrent-To')
