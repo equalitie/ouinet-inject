@@ -178,16 +178,17 @@ def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
     }
     return desc
 
-def _b64digest_file(hash, path):
-    """Return a Base64-encoded `hash` digest of the file at `path`.
+def _digest_file(hash, path):
+    """Return the `hash` digest of the file at `path`.
 
     >>> import hashlib
     >>> import tempfile
     >>> with tempfile.NamedTemporaryFile() as tf:
     >>>     tf.write(b'<!DOCTYPE html>\n<p>Tiny body here!</p>')
     >>>     tf.flush()
-    >>>     print(_b64digest_file(hashlib.sha256, tf.name))
-    j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
+    >>>     digest = _digest_file(hashlib.sha256, tf.name)
+    >>>     print(base64.b64encode(digest))
+    b'j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w='
     """
     buf = bytearray(4096)
     h = hash()
@@ -196,7 +197,7 @@ def _b64digest_file(hash, path):
         while l:
             h.update(buf[:l])
             l = f.readinto(buf)
-    return base64.b64encode(h.digest()).decode()
+    return h.digest()
 
 def descriptor_from_file(canonical_uri, data_path, **kwargs):
     """Returns the descriptor and a hash of the data.
@@ -215,9 +216,9 @@ def descriptor_from_file(canonical_uri, data_path, **kwargs):
 
     # These are not part of the descriptor v0 spec,
     # they are added to ease tools locate body data files.
+    data_digest = _digest_file(hashlib.sha256, data_path)
     desc['body_size'] = os.path.getsize(data_path)
-    desc['body_digest'] = data_digest = (
-        'SHA-256=' + _b64digest_file(hashlib.sha256, data_path))
+    desc['body_digest'] = 'SHA-256=' + base64.b64encode(data_digest).decode()
 
     return (desc, data_ipfs_cid)
 
