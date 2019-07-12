@@ -5,6 +5,7 @@
 import argparse
 import base64
 import codecs
+import glob
 import hashlib
 import io
 import json
@@ -238,12 +239,12 @@ class Injection:
     pass  # just a dummy container
 
 def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
-    """Create descriptor and insertion data for the injection of the `uri`.
+    """Create injection data for the injection of the `uri`.
 
-    A tuple is returned with the serialized descriptor (as bytes),
-    a digest of the data (as bytes),
-    and a dictionary mapping the different index names to
-    their respective serialized insertion data (as bytes).
+    A tuple is returned with
+    a dictionary mapping different injection file extensions to
+    their respective serialized data (as bytes),
+    and a digest of the data itself (as bytes).
     """
 
     # Prepare the injection.
@@ -258,6 +259,8 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     for (k, v) in kwargs.items():  # other stuff like metadata
         setattr(inj, k, v)
 
+    inj_data = {}
+
     # Generate the descriptor.
     logger.debug("creating descriptor for URI: %s", inj.uri)
     desc = descriptor_from_injection(inj)
@@ -269,15 +272,16 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
                               stdout=subprocess.PIPE, check=True)
     desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
     desc_inline = b'/zlib/' + zlib.compress(desc_data)
+    inj_data[DESC_FILE_EXT] = desc_data
 
     # Prepare insertion of the descriptor into indexes.
     index_key = index_key_from_http_url(inj.uri)
-    ins_data = {}
     if bep44_priv_key:
         logger.debug("creating BEP44 insertion data for URI: %s", inj.uri)
-        ins_data['bep44'] = bep44_insert(index_key, desc_link, desc_inline, bep44_priv_key)
+        inj_data[INS_FILE_EXT_PFX + 'bep44'] = bep44_insert(
+            index_key, desc_link, desc_inline, bep44_priv_key)
 
-    return (desc_data, data_digest, ins_data)
+    return (inj_data, data_digest)
 
 def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
@@ -451,27 +455,21 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
 
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, output_dir)
-    descp = inj_prefix + DESC_FILE_EXT
-    if os.path.exists(descp):
-        logger.info("skipping URI with existing descriptor: %s", uri)
+    if glob.glob(inj_prefix + '.*'):
+        logger.info("skipping URI with existing injection: %s", uri)
         return  # a descriptor for the URI already exists
 
     # After all the previous checks, proceed to the real injection.
-    (desc_data, data_digest, inj_data) = inject_uri(
-        uri, data_path, **kwargs
-    )
+    (inj_data, data_digest) = inject_uri(uri, data_path, **kwargs)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
-    desc_dir = os.path.dirname(descp)
-    os.makedirs(desc_dir, exist_ok=True)
-    with open(descp, 'wb') as descf:
-        logger.debug("writing descriptor: uri_hash=%s", uri_hash)
-        descf.write(desc_data)
-    for (idx, idx_inj_data) in inj_data.items():
-        with open(inj_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
-            logger.debug("writing insertion data (%s): uri_hash=%s", idx, uri_hash)
-            injf.write(idx_inj_data)
+    inj_dir = os.path.dirname(inj_prefix)
+    os.makedirs(inj_prefix, exist_ok=True)
+    for (iext, idata) in inj_data.items():
+        with open(inj_prefix + iext, 'wb') as injf:
+            logger.debug("writing injection data (%s): uri_hash=%s", iext[1:], uri_hash)
+            injf.write(idata)
 
     # Hard-link the data file (if not already there).
     # TODO: look for better options
