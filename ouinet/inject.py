@@ -31,8 +31,10 @@ OUINET_DIR_NAME = '.ouinet'
 URI_FILE_EXT = '.uri'
 DATA_FILE_EXT = '.data'
 HTTP_RPH_FILE_EXT = '.http-rph'
-DESC_FILE_EXT = '.desc'
-INS_FILE_EXT_PFX = '.ins-'
+
+DESC_TAG = 'desc'
+INS_TAG_PFX = 'ins-'
+
 DATA_DIR_NAME = 'ouinet-data'
 
 OUINET_DIR_INFO = """\
@@ -242,7 +244,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
     """Create injection data for the injection of the `uri`.
 
     A tuple is returned with
-    a dictionary mapping different injection file extensions to
+    a dictionary mapping different injection data tags to
     their respective serialized data (as bytes),
     and a digest of the data itself (as bytes).
     """
@@ -272,13 +274,13 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
                               stdout=subprocess.PIPE, check=True)
     desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
     desc_inline = b'/zlib/' + zlib.compress(desc_data)
-    inj_data[DESC_FILE_EXT] = desc_data
+    inj_data[DESC_TAG] = desc_data
 
     # Prepare insertion of the descriptor into indexes.
     index_key = index_key_from_http_url(inj.uri)
     if bep44_priv_key:
         logger.debug("creating BEP44 insertion data for URI: %s", inj.uri)
-        inj_data[INS_FILE_EXT_PFX + 'bep44'] = bep44_insert(
+        inj_data[INS_TAG_PFX + 'bep44'] = bep44_insert(
             index_key, desc_link, desc_inline, bep44_priv_key)
 
     return (inj_data, data_digest)
@@ -466,9 +468,9 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     # TODO: handle exceptions
     inj_dir = os.path.dirname(inj_prefix)
     os.makedirs(inj_prefix, exist_ok=True)
-    for (iext, idata) in inj_data.items():
-        with open(inj_prefix + iext, 'wb') as injf:
-            logger.debug("writing injection data (%s): uri_hash=%s", iext[1:], uri_hash)
+    for (itag, idata) in inj_data.items():
+        with open('%s.%s' % (inj_prefix, itag), 'wb') as injf:
+            logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
 
     # Hard-link the data file (if not already there).
