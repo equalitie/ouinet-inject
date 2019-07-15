@@ -240,7 +240,7 @@ def get_canonical_uri(uri):
 class Injection:
     pass  # just a dummy container
 
-def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
+def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None, **kwargs):
     """Create injection data for the injection of the `uri`.
 
     A tuple is returned with
@@ -283,13 +283,20 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
         inj_data[INS_TAG_PFX + 'bep44'] = bep44_insert(
             index_key, desc_link, desc_inline, bep44_priv_key)
 
+    # Create a signed HTTP response head.
+    if httpsig_priv_key:
+        pass  # TODO
+
     return (inj_data, data_digest)
 
-def inject_dir(input_dir, output_dir, bep44_priv_key=None):
+def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
 
     `bep44_priv_key` is the Ed25519 private key to be used to
     sign insertions into the BEP44 index.
+
+    `httpsig_priv_key` is the Ed25519 private key to be used to
+    create HTTP signatures.
 
     Limitations:
 
@@ -348,6 +355,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             if not txenc and not ctenc:
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
+                                   httpsig_priv_key=httpsig_priv_key,
                                    meta_http_rph=http_headers)
                 continue
 
@@ -368,9 +376,10 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
                 http_headers.replace_header('Content-Length', str(os.path.getsize(datap)))
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
+                                   httpsig_priv_key=httpsig_priv_key,
                                    meta_http_rph=http_headers)
 
-def inject_warc(warc_file, output_dir, bep44_priv_key=None):
+def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=None):
     # For marking GET requests pointed to by responses.
     seen_get_req = set()
     # For marking responses pointed to by GET requests.
@@ -437,6 +446,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             datap = os.path.join(output_dir, dataf.name)
             save_uri_injection(uri, datap, output_dir,
                                bep44_priv_key=bep44_priv_key,
+                               httpsig_priv_key=httpsig_priv_key,
                                meta_http_rph=http_rph)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
@@ -483,6 +493,20 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
         logger.debug("linking data file: uri_hash=%s", uri_hash)
         os.link(data_path, out_data_path)
 
+def _private_key_from_arg(priv_key):
+    """Return the Ed25519 private key in command-line argument `priv_key`.
+
+    Return `None` if no key is specified.
+    """
+    if os.path.sep in priv_key:  # path to file with key
+        logger.debug("loading private key from file: %s", priv_key)
+        with open(priv_key) as kf:
+            priv_key = kf.read().strip()
+    if priv_key:  # decode key
+        priv_key = nacl.signing.SigningKey(
+            nacl.signing.SignedMessage.fromhex(priv_key))
+        return priv_key
+
 def main():
     parser = argparse.ArgumentParser(
         description="Sign content to be published using Ouinet.")
@@ -490,6 +514,13 @@ def main():
         '--bep44-private-key', metavar="KEY", default='',
         help=("hex-encoded private key for BEP44 index insertion; "
               "if KEY contains '{0}' (e.g. '.{0}bep44.key'), "
+              "handle as a file containing the encoded key".format(
+                  os.path.sep
+              )))
+    parser.add_argument(
+        '--httpsig-private-key', metavar="KEY", default='',
+        help=("hex-encoded private key for HTTP signatures; "
+              "if KEY contains '{0}' (e.g. '.{0}httpsig.key'), "
               "handle as a file containing the encoded key".format(
                   os.path.sep
               )))
@@ -504,26 +535,22 @@ def main():
         help="the directory where content data, descriptors and insertion data will be saved to")
     args = parser.parse_args()
 
-    # Retrieve the BEP44 private key from disk or argument.
-    bep44_priv_key = args.bep44_private_key
-    if os.path.sep in bep44_priv_key:  # path to file with key
-        logger.debug("loading BEP44 private key from file: %s", bep44_priv_key)
-        with open(bep44_priv_key) as b44kf:
-            bep44_priv_key = b44kf.read().strip()
-    if bep44_priv_key:  # decode key
-        bep44_priv_key = nacl.signing.SigningKey(
-            nacl.signing.SignedMessage.fromhex(bep44_priv_key))
-        bep44_pub_key = bep44_priv_key.verify_key
-        logger.info("BEP44 index public key: %s",
-                    bep44_pub_key.encode(nacl.encoding.HexEncoder).decode())
+    # Retrieve private keys from disk or arguments.
+    bep44_sk = _private_key_from_arg(args.bep44_private_key)
+    httpsig_sk = _private_key_from_arg(args.httpsig_private_key)
+    sk2pkhex = lambda sk: sk.verify_key.encode(nacl.encoding.HexEncoder).decode()
+    if bep44_sk:
+        logger.info("BEP44 index public key: %s", sk2pkhex(bep44_sk))
+    if httpsig_sk:
+        logger.info("HTTP signatures public key: %s", sk2pkhex(httpsig_sk))
 
     if os.path.isdir(args.input):
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
-                   bep44_priv_key=bep44_priv_key)
+                   bep44_priv_key=bep44_sk, httpsig_priv_key=sk)
     else:
         with open(args.input, 'rb') as warcf:
             inject_warc(warcf, args.output_directory,
-                        bep44_priv_key=bep44_priv_key)
+                        bep44_priv_key=bep44_sk, httpsig_priv_key=httpsig_sk)
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s',
