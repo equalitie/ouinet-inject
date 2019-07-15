@@ -546,7 +546,7 @@ def main():
 
     if os.path.isdir(args.input):
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
-                   bep44_priv_key=bep44_sk, httpsig_priv_key=sk)
+                   bep44_priv_key=bep44_sk, httpsig_priv_key=httpsig_sk)
     else:
         with open(args.input, 'rb') as warcf:
             inject_warc(warcf, args.output_directory,
