@@ -178,7 +178,7 @@ def descriptor_from_injection(inj):
     # v0 descriptors only support HTTP exchanges,
     # with compulsory response head metadata,
     # and a single IPFS CID pointing to the body.
-    meta_http_rph = to_cache_response(inj.meta_http_rph).to_ascii_bytes().decode()
+    meta_http_rph = inj.meta_http_rph.to_ascii_bytes().decode()
     desc = {
         '!ouinet_version': 0,
         'url': inj.uri,
@@ -239,7 +239,8 @@ def get_canonical_uri(uri):
 class Injection:
     pass  # just a dummy container
 
-def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None, **kwargs):
+def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
+               meta_http_rph=None, **kwargs):
     """Create injection data for the injection of the `uri`.
 
     A tuple is returned with
@@ -257,6 +258,8 @@ def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None, **kwa
     data_digest = _digest_from_path(hashlib.sha256, data_path)
     inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
     inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
+    if meta_http_rph:
+        inj.meta_http_rph = to_cache_response(meta_http_rph)
     for (k, v) in kwargs.items():  # other stuff like metadata
         setattr(inj, k, v)
 
