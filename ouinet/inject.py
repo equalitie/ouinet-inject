@@ -134,18 +134,17 @@ _cache_http_response_headers = [
     'Warning',
 ]
 
-def process_http_response(rp):
-    """Return a filtered version of `rp` as a response string."""
+def to_cache_response(rp):
+    """Return a filtered version of `rp`."""
 
-    # Build a new response head string with selected headers.
-    out_rp_str = '%s %s\r\n' % (rp.protocol, rp.statusline)
+    # Build a new response head with selected headers.
+    headers = []
     for hdrn in _cache_http_response_headers:
         hdrn_lc = hdrn.lower()  # concatenate repeated headers
         hdrv = ', '.join(v for (h, v) in rp.headers if h.lower() == hdrn_lc)
         if hdrv:
-            out_rp_str += '%s: %s\r\n' % (hdrn, hdrv)
-    out_rp_str += '\r\n'
-    return out_rp_str
+            headers.append((hdrn, hdrv))
+    return _warchead.StatusAndHeaders(rp.statusline, headers, rp.protocol)
 
 def _digest_from_path(hash, path):
     """Return the `hash` digest of the file at `path`.
@@ -179,7 +178,7 @@ def descriptor_from_injection(inj):
     # v0 descriptors only support HTTP exchanges,
     # with compulsory response head metadata,
     # and a single IPFS CID pointing to the body.
-    meta_http_rph = process_http_response(inj.meta_http_rph)
+    meta_http_rph = to_cache_response(inj.meta_http_rph).to_ascii_bytes().decode()
     desc = {
         '!ouinet_version': 0,
         'url': inj.uri,
