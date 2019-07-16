@@ -186,7 +186,7 @@ def descriptor_from_injection(inj):
         # The ``.000000`` is a work around a Boost limitation in date parsing
         # where microsecond precision in extended ISO dates is compulsory.
         # That limitation affects insertion in the Ouinet client.
-        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', inj.ts),
+        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', time.gmtime(inj.ts)),
         'head': meta_http_rph,
         'body_link': inj.data_ipfs_cid,
 
@@ -253,7 +253,7 @@ def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
     inj = Injection()
     inj.uri = get_canonical_uri(uri)
     inj.id = str(uuid.uuid4())
-    inj.ts = time.gmtime()
+    inj.ts = time.time()
     inj.data_size = os.path.getsize(data_path)
     data_digest = _digest_from_path(hashlib.sha256, data_path)
     inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
