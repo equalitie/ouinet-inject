@@ -34,6 +34,7 @@ HTTP_RES_H_FILE_EXT = '.http-res-h'
 
 DESC_TAG = 'desc'
 INS_TAG_PFX = 'ins-'
+HTTP_SIG_TAG = 'http-res-h'
 
 DATA_DIR_NAME = 'ouinet-data'
 
@@ -233,6 +234,40 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
         v=v
     ))
 
+_http_sigfmt = (
+    'keyId="%s"'
+    ',algorithm="hs2019"'
+    ',created=%d'
+    ',headers="%s"'
+    ',signature="%s"'
+)
+def http_signature(res_h, ed25519_priv_key, key_id):
+    return 'TODO'  # TODO
+
+def http_key_id_for_injection(httpsig_priv_key):
+    b64enc = nacl.encoding.Base64Encoder
+    return 'ed25519=' + httpsig_priv_key.verify_key.encode(b64enc).decode()
+
+_hdr_pfx = 'X-Ouinet-'
+_hdr_version = _hdr_pfx + 'Version'
+_hdr_uri = _hdr_pfx + 'URI'
+_hdr_injection = _hdr_pfx + 'Injection'
+_hdr_http_status = _hdr_pfx + 'HTTP-Status'
+_hdr_data_size = _hdr_pfx + 'Data-Size'
+def http_inject(inj, httpsig_priv_key):
+    res = inj.meta_http_res_h
+    to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
+    to_sign.add_header(_hdr_version, str(0))
+    to_sign.add_header(_hdr_uri, inj.uri)
+    to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
+    to_sign.add_header(_hdr_http_status, to_sign.get_statuscode())
+    to_sign.add_header(_hdr_data_size, str(inj.data_size))
+    to_sign.add_header('Digest', inj.data_digest)
+    key_id = http_key_id_for_injection(httpsig_priv_key)  # TODO: cache this
+    signature = http_signature(to_sign, httpsig_priv_key, key_id)
+    to_sign.add_header('Signature', signature)
+    return to_sign.to_ascii_bytes()
+
 def get_canonical_uri(uri):
     return uri  # TODO
 
@@ -287,7 +322,8 @@ def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
 
     # Create a signed HTTP response head.
     if httpsig_priv_key:
-        pass  # TODO
+        logger.debug("creating HTTP signature for URI: %s", inj.uri)
+        inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key)
 
     return (inj_data, data_digest)
 
