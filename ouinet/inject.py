@@ -5,6 +5,7 @@
 import argparse
 import base64
 import codecs
+import collections
 import glob
 import hashlib
 import io
@@ -241,8 +242,26 @@ _http_sigfmt = (
     ',headers="%s"'
     ',signature="%s"'
 )
-def http_signature(res_h, ed25519_priv_key, key_id):
-    return 'TODO'  # TODO
+
+def http_signature(res_h, priv_key, key_id):
+    ts = time.time()
+
+    # Accumulate stripped values for repeated headers,
+    # while getting the list of headers in input order.
+    header_values = collections.defaultdict(
+        list, {'(created)': ['%d' % ts]})
+    headers = list(header_values.keys())
+    for (hn, hv) in res_h.headers:
+        (hn, hv) = (hn.lower(), hv.strip())
+        if hn not in header_values:
+            headers.append(hn)
+        header_values[hn].append(hv)
+
+    sig_string = '\n'.join('%s: %s' % (hn, ', '.join(header_values[hn]))
+                           for hn in headers).encode()  # only ASCII, RFC 7230#3.2.4
+    encoded_sig = base64.b64encode(priv_key.sign(sig_string)[:-len(sig_string)]).decode()
+
+    return _http_sigfmt % (key_id, ts, ' '.join(headers), encoded_sig)
 
 def http_key_id_for_injection(httpsig_priv_key):
     b64enc = nacl.encoding.Base64Encoder
@@ -254,6 +273,7 @@ _hdr_uri = _hdr_pfx + 'URI'
 _hdr_injection = _hdr_pfx + 'Injection'
 _hdr_http_status = _hdr_pfx + 'HTTP-Status'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
+
 def http_inject(inj, httpsig_priv_key):
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
