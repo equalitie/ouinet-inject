@@ -30,7 +30,7 @@ import warcio.statusandheaders as _warchead
 OUINET_DIR_NAME = '.ouinet'
 URI_FILE_EXT = '.uri'
 DATA_FILE_EXT = '.data'
-HTTP_RPH_FILE_EXT = '.http-rph'
+HTTP_RES_H_FILE_EXT = '.http-res-h'
 
 DESC_TAG = 'desc'
 INS_TAG_PFX = 'ins-'
@@ -134,17 +134,17 @@ _cache_http_response_headers = [
     'Warning',
 ]
 
-def to_cache_response(rp):
-    """Return a filtered version of `rp`."""
+def to_cache_response(res_h):
+    """Return a filtered version of `res_h`."""
 
     # Build a new response head with selected headers.
     headers = []
     for hdrn in _cache_http_response_headers:
         hdrn_lc = hdrn.lower()  # concatenate repeated headers
-        hdrv = ', '.join(v for (h, v) in rp.headers if h.lower() == hdrn_lc)
+        hdrv = ', '.join(v for (h, v) in res_h.headers if h.lower() == hdrn_lc)
         if hdrv:
             headers.append((hdrn, hdrv))
-    return _warchead.StatusAndHeaders(rp.statusline, headers, rp.protocol)
+    return _warchead.StatusAndHeaders(res_h.statusline, headers, res_h.protocol)
 
 def _digest_from_path(hash, path):
     """Return the `hash` digest of the file at `path`.
@@ -178,7 +178,7 @@ def descriptor_from_injection(inj):
     # v0 descriptors only support HTTP exchanges,
     # with compulsory response head metadata,
     # and a single IPFS CID pointing to the body.
-    meta_http_rph = inj.meta_http_rph.to_ascii_bytes().decode()
+    meta_http_res_h = inj.meta_http_res_h.to_ascii_bytes().decode()
     desc = {
         '!ouinet_version': 0,
         'url': inj.uri,
@@ -187,7 +187,7 @@ def descriptor_from_injection(inj):
         # where microsecond precision in extended ISO dates is compulsory.
         # That limitation affects insertion in the Ouinet client.
         'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', time.gmtime(inj.ts)),
-        'head': meta_http_rph,
+        'head': meta_http_res_h,
         'body_link': inj.data_ipfs_cid,
 
         # These are not part of the descriptor v0 spec,
@@ -240,7 +240,7 @@ class Injection:
     pass  # just a dummy container
 
 def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
-               meta_http_rph=None, **kwargs):
+               meta_http_res_h=None, **kwargs):
     """Create injection data for the injection of the `uri`.
 
     A tuple is returned with
@@ -258,8 +258,8 @@ def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
     data_digest = _digest_from_path(hashlib.sha256, data_path)
     inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
     inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
-    if meta_http_rph:
-        inj.meta_http_rph = to_cache_response(meta_http_rph)
+    if meta_http_res_h:
+        inj.meta_http_res_h = to_cache_response(meta_http_res_h)
     for (k, v) in kwargs.items():  # other stuff like metadata
         setattr(inj, k, v)
 
@@ -309,12 +309,12 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
     somewhere under `input_dir` there must exist:
 
     - ``NAME.uri`` with the URI itself; the ``NAME`` is not relevant
-    - ``NAME.http-rph`` with the head of the HTTP GET response
+    - ``NAME.http-res-h`` with the head of the HTTP GET response
     - ``NAME.data`` with the body of the HTTP GET response
       (after transfer decoding if a non-identity transfer encoding was used)
 
     The HTTP GET response head will be processed, thus the head in
-    the resulting descriptor may differ from that in the ``.http-rph`` file.
+    the resulting descriptor may differ from that in the ``.http-res-h`` file.
 
     See `save_uri_injection()` for more information on
     the storage of injections in `output_dir`.
@@ -331,19 +331,19 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
 
             urip = uri_prefix + URI_FILE_EXT
             datap = uri_prefix + DATA_FILE_EXT
-            http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
+            http_res_hp = uri_prefix + HTTP_RES_H_FILE_EXT
 
             if not os.path.exists(datap):
                 logger.warning("skipping URI with missing data file: %s", urip)
                 continue  # data file must exist even if empty
 
-            if not os.path.exists(http_rphp):
+            if not os.path.exists(http_res_hp):
                 logger.warning("skipping URI with missing HTTP response head: %s", urip)
                 continue  # only handle HTTP insertion for the moment
 
-            with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
+            with open(urip, 'rb') as urif, open(http_res_hp, 'rb') as http_res_hf:
                 uri = urif.read().decode()  # only ASCII, RFC 3986#1.2.1
-                http_headers = http_parse(http_rphf)
+                http_headers = http_parse(http_res_hf)
 
             # We use the identity-encoded body to
             # make it self-standing and more amenable to seeding in other systems.
@@ -358,7 +358,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
                                    httpsig_priv_key=httpsig_priv_key,
-                                   meta_http_rph=http_headers)
+                                   meta_http_res_h=http_headers)
                 continue
 
             # Extract body data to a temporary file in the output directory,
@@ -379,7 +379,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
                                    httpsig_priv_key=httpsig_priv_key,
-                                   meta_http_rph=http_headers)
+                                   meta_http_res_h=http_headers)
 
 def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=None):
     # For marking GET requests pointed to by responses.
@@ -410,14 +410,14 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=Non
             record.http_headers.remove_header('Transfer-Encoding')
             record.http_headers.remove_header('Content-Encoding')
             record.http_headers.replace_header('Content-Length', str(len(body)))
-            http_rph = record.http_headers
+            http_res_h = record.http_headers
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
             req_id = record.rec_headers.get_header('WARC-Concurrent-To')
             if req_id in seen_get_req:
                 seen_get_req.remove(req_id)
             elif resp_id not in seen_get_resp:
-                seen_get_resp[resp_id] = (uri, http_rph, body)  # delay until GET confirmation
+                seen_get_resp[resp_id] = (uri, http_res_h, body)  # delay until GET confirmation
                 continue
             # GET previously confirmed, proceed.
             seen_get_resp.pop(resp_id, None)
@@ -432,7 +432,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=Non
                 seen_get_resp[resp_id] = None  # confirm GET, pending response
                 continue
             # GET confirmed, pop out response info and process it.
-            (uri, http_rph, body) = seen_get_resp.pop(resp_id)
+            (uri, http_res_h, body) = seen_get_resp.pop(resp_id)
 
         else:  # ignore other kinds of records
             continue
@@ -449,7 +449,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=Non
             save_uri_injection(uri, datap, output_dir,
                                bep44_priv_key=bep44_priv_key,
                                httpsig_priv_key=httpsig_priv_key,
-                               meta_http_rph=http_rph)
+                               meta_http_res_h=http_res_h)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
