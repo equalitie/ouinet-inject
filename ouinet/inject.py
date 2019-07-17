@@ -95,7 +95,7 @@ def data_path_from_data_digest(data_digest, output_dir):
     >>> b64digest = b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
     >>> digest = base64.b64decode(b64digest)
     >>> data_path_from_data_digest(digest, '.').split(os.path.sep)
-    ['.', 'data', 'e3', 'b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']
+    ['.', 'ouinet-data', 'e3', 'b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']
     """
     # The hash above is for an empty (zero-length) file.
     #
@@ -154,8 +154,9 @@ def _digest_from_path(hash, path):
     >>> import hashlib
     >>> import tempfile
     >>> with tempfile.NamedTemporaryFile() as tf:  # empty
-    >>>     digest = _digest_from_path(hashlib.sha256, tf.name)
-    >>>     print(base64.b64encode(digest))
+    ...     digest = _digest_from_path(hashlib.sha256, tf.name)
+    ...     print(base64.b64encode(digest))
+    ...
     b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
     """
     buf = bytearray(4096)
