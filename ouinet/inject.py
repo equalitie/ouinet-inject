@@ -244,8 +244,8 @@ _http_sigfmt = (
     ',signature="%s"'
 )
 
-def http_signature(res_h, priv_key, key_id):
-    ts = time.time()
+def http_signature(res_h, priv_key, key_id, _ts=None):
+    ts = _ts if _ts else time.time()  # for testing
 
     # Accumulate stripped values for repeated headers,
     # while getting the list of headers in input order.
@@ -275,7 +275,73 @@ _hdr_injection = _hdr_pfx + 'Injection'
 _hdr_http_status = _hdr_pfx + 'HTTP-Status'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
 
-def http_inject(inj, httpsig_priv_key):
+def http_inject(inj, httpsig_priv_key, _ts=None):
+    r"""Get an HTTP head for an injection using an Ed25519 private key.
+
+    The result is returned as bytes.
+
+    >>> import io
+    >>> from base64 import b64encode as b64enc, b64decode as b64dec
+    >>> from hashlib import sha256
+    >>> from nacl.signing import SigningKey
+    >>> from warcio.statusandheaders import StatusAndHeadersParser as parser
+    >>>
+    >>> body = b'<!DOCTYPE html>\n<p>Tiny body here!</p>'
+    >>> b64_digest = b64enc(sha256(body).digest()).decode()
+    >>> b64_digest
+    'j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w='
+    >>>
+    >>> head_s = b'''\
+    ... HTTP/1.1 200 OK
+    ... Date: Mon, 15 Jan 2018 20:31:50 GMT
+    ... Server: Apache1
+    ... Content-Type: text/html
+    ... Content-Disposition: inline; filename="foo.html"
+    ... Content-Length: 38
+    ... Server: Apache2
+    ...
+    ... '''.replace(b'\n', b'\r\n')
+    >>> head = parser(['HTTP/1.0', 'HTTP/1.1']).parse(io.BytesIO(head_s))
+    >>>
+    >>> ts = 1516048310
+    >>> class inj:
+    ...     uri = 'https://example.com/foo'
+    ...     id = 'd6076384-2295-462b-a047-fe2c9274e58d'
+    ...     ts = ts
+    ...     data_size = len(body)
+    ...     data_digest = 'SHA-256=' + b64_digest
+    ...     meta_http_res_h = head
+    >>>
+    >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
+    >>> signed = http_inject(inj, sk, ts + 1)
+    >>>
+    >>> signed_ref = b'''\
+    ... HTTP/1.1 200 OK
+    ... Date: Mon, 15 Jan 2018 20:31:50 GMT
+    ... Server: Apache1
+    ... Content-Type: text/html
+    ... Content-Disposition: inline; filename="foo.html"
+    ... Content-Length: 38
+    ... Server: Apache2
+    ... X-Ouinet-Version: 0
+    ... X-Ouinet-URI: https://example.com/foo
+    ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+    ... X-Ouinet-HTTP-Status: 200
+    ... X-Ouinet-Data-Size: 38
+    ... Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
+    ... Signature: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... algorithm="hs2019",created=1516048311,\
+    ... headers="(created) \
+    ... date server content-type content-disposition content-length \
+    ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
+    ... x-ouinet-http-status x-ouinet-data-size \
+    ... digest",\
+    ... signature="ltqzwMrXQBXfpjG9CbN64veuutJNTWLMW3zhWmJSsOfpsi+celTEPYYLC4n5ykrEovhI6MFPCmkJxf9dlDS9DA=="
+    ...
+    ... '''.replace(b'\n', b'\r\n')
+    >>> signed == signed_ref
+    True
+    """
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
     to_sign.add_header(_hdr_version, str(0))
@@ -285,7 +351,7 @@ def http_inject(inj, httpsig_priv_key):
     to_sign.add_header(_hdr_data_size, str(inj.data_size))
     to_sign.add_header('Digest', inj.data_digest)
     key_id = http_key_id_for_injection(httpsig_priv_key)  # TODO: cache this
-    signature = http_signature(to_sign, httpsig_priv_key, key_id)
+    signature = http_signature(to_sign, httpsig_priv_key, key_id, _ts)
     to_sign.add_header('Signature', signature)
     return to_sign.to_ascii_bytes()
 
