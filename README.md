@@ -7,11 +7,15 @@ offline injection of content for later insertion into
 
 ## Keys
 
-For the moment only BitTorrent BEP44 keys for signing insertions into Ouinet's
-BEP44 distributed cache index are supported.
+For the moment only two injection mechanisms are supported:
 
-If you are running a Ouinet injector, you may use the ``bep44-private-key``
-and ``bep44-public-key`` files present in its repository directory.
+  - BitTorrent BEP44 keys for signing insertions into Ouinet's BEP44
+    distributed cache index.
+  - Ed25519 keys for creating signatures of HTTP response heads according to
+    <https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11>.
+
+If you are running a Ouinet injector, you may use the ``ed25519-private-key``
+and ``ed25519-public-key`` files present in its repository directory.
 
 ## Input
 
@@ -28,11 +32,11 @@ hoc input format.
 
 ## Output
 
-The script produces a set of insertion and content data files which are added
+The script produces a set of injection and content data files which are added
 to a given output directory.  That directory can be circulated and used as
 input to ``ouinet-upload`` on a different machine running a Ouinet client
-configured to trust the public key matching the private BEP44 key used for
-insertion signing.
+configured to trust the public keys matching the private keys used for
+injection.
 
 Please look for ``readme.txt`` files in the output directory for a description
 of its format.
@@ -58,15 +62,18 @@ repo will happen.
 
 ## Usage
 
-To inject the content in ``INPUT.warc.gz`` and put insertion data in
+To inject the content in ``INPUT.warc.gz`` and put injection data in
 ``OUTPUT_DIR``, run:
 
-    $ python3 -m ouinet.inject --bep44-private-key=/path/to/bep44.key \
+    $ python3 -m ouinet.inject \
+      --bep44-private-key=/path/to/bep44.key \
+      --httpsig-private-key=/path/to/httpsig.key \
       INPUT.warc.gz OUTPUT_DIR
 
-Where ``/path/to/bep44.key`` should contain the hex-encoded *private*
-BitTorrent BEP44 key.  Please keep that key secret and safe!  The *public*
-BEP44 key will be printed as part of the program's diagnostics.
+Where ``/path/to/{bep44,httpsig}.key`` should contain the hex-encoded
+*private* BitTorrent BEP44 or HTTP signatures keys, respectively.  Please keep
+those keys secret and safe!  The matching *public* keys will be printed as
+part of the program's diagnostics.
 
 To insert the content stored in `OUTPUT_DIR` from another machine using
 ``ouinet-upload``, run:

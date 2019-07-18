@@ -3,8 +3,11 @@
 """
 
 import argparse
+import base64
+import codecs
+import collections
+import glob
 import hashlib
-import http.client
 import io
 import json
 import logging
@@ -28,9 +31,12 @@ import warcio.statusandheaders as _warchead
 OUINET_DIR_NAME = '.ouinet'
 URI_FILE_EXT = '.uri'
 DATA_FILE_EXT = '.data'
-HTTP_RPH_FILE_EXT = '.http-rph'
-DESC_FILE_EXT = '.desc'
-INS_FILE_EXT_PFX = '.ins-'
+HTTP_RES_H_FILE_EXT = '.http-res-h'
+
+DESC_TAG = 'desc'
+INS_TAG_PFX = 'ins-'
+HTTP_SIG_TAG = 'http-res-h'
+
 DATA_DIR_NAME = 'ouinet-data'
 
 OUINET_DIR_INFO = """\
@@ -54,14 +60,14 @@ This directory contains content data for seeding using a Ouinet client and
 
 Please run `ouinet-upload` on the parent directory.
 
-Each data file in `<XY>/<CID>`, where CID is the lower-case, Base32 IPFS CID
-(v1) hash of its contents, and XY are the next-to-last two characters of CID.
+Each data file is `<XY>/<REST>`, where `<XY><REST>` is the lower-case,
+hexadecimal SHA-256 hash of its contents.
 
-To get the Base32 CID (v1) from the Base58 CID (v0) used by descriptors in the
-`%s` directory, use `ipfs cid base32 <Base58_CID>`.
+To get the hexadecimal hash from the Base64 one used by descriptors in the
+`%s` directory, use:
 
-To get the Base58 CID (v0) from the Base32 CID (v1) used in this directory,
-use `ipfs cid format -v 0 -b base58btc <Base32_CID>`.
+    echo 'SHA-256=...' | cut -d= -f2- | base64 -d | hexdump -e '/1 "%%02x"'
+
 """ % OUINET_DIR_NAME
 
 logger = logging.getLogger(__name__)
@@ -76,36 +82,27 @@ def _maybe_add_readme(readme_dir, text):
     with open(readme_path, 'w') as f:
         f.write(text)
 
-def desc_path_from_uri_hash(uri_hash, output_dir):
+def inj_prefix_from_uri_hash(uri_hash, output_dir):
     # The splitting mimics that of Git object storage:
     # we use the initial two digits since
     # with SHA1 all bytes vary more or less uniformly.
-    return os.path.join(output_dir, OUINET_DIR_NAME,
-                        uri_hash[:2], uri_hash[2:] + DESC_FILE_EXT)
+    return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash[:2], uri_hash[2:])
 
-def data_path_from_data_mhash(data_mhash, output_dir):
-    """Return the output path for a file with the given `data_mhash`.
+def data_path_from_data_digest(data_digest, output_dir):
+    """Return the output path for a file with the given `data_digest`.
 
-    >>> mhash = 'QmbFMke1KXqnYyBBWxB74N4c5SBnJMVAiMNRcGu6x1AwQH'
-    >>> data_path_from_data_mhash(mhash, '.').split(os.path.sep)
-    ['.', 'data', 'b4', 'bafybeif7ztnhq65lumvvtr4ekcwd2ifwgm3awq4zfr3srh462rwyinlb4y']
+    >>> import base64
+    >>> b64digest = b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
+    >>> digest = base64.b64decode(b64digest)
+    >>> data_path_from_data_digest(digest, '.').split(os.path.sep)
+    ['.', 'ouinet-data', 'e3', 'b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']
     """
     # The hash above is for an empty (zero-length) file.
     #
-    # Use a Base32 hash since it is case-insensitive,
+    # Use an hexadecimal hash since it is case-insensitive,
     # so we avoid collisions on platforms like Windows.
-    #
-    # Also, since ASCII-encoded multihashes have prefix bytes indicating things like
-    # the encoding base, hash function code, hash size etc.,
-    # we prefer end digits for the parent directory,
-    # but not the last one since it may be affected by padding.
-    # The [-3:-1] digits are used as in IPFS v7 repository format,
-    # though our hashes are for the whole file and not just for blocks.
-    ipfs_cid = subprocess.run(['ipfs', 'cid', 'base32'],
-                              input=data_mhash.encode(),
-                              stdout=subprocess.PIPE, check=True)
-    b32_mhash = ipfs_cid.stdout.decode().strip()
-    return os.path.join(output_dir, DATA_DIR_NAME, b32_mhash[-3:-1], b32_mhash)
+    hex_digest = codecs.encode(data_digest, 'hex').decode()
+    return os.path.join(output_dir, DATA_DIR_NAME, hex_digest[:2], hex_digest[2:])
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -139,59 +136,69 @@ _cache_http_response_headers = [
     'Warning',
 ]
 
-def process_http_response(resp_str):
-    """Return a filtered version of `resp_str` as another response string."""
+def to_cache_response(res_h):
+    """Return a filtered version of `res_h`."""
 
-    # Parse response head from string.
-    rpf = io.BytesIO(resp_str.encode('iso-8859-1'))  # RFC 7230#3.2.4
-    rpf.makefile = lambda *a, **k: rpf  # monkey-patch as a socket
-    rp = http.client.HTTPResponse(rpf)
-    rp.begin()
-
-    # Build a new response head string with selected headers.
-    v = int(rp.version)
-    version = 'HTTP/%d.%d' % (v // 10, v % 10)
-    out_rp_str = '%s %s %s\r\n' % (version, rp.status, rp.reason)
+    # Build a new response head with selected headers.
+    headers = []
     for hdrn in _cache_http_response_headers:
-        hdrv = rp.getheader(hdrn)  # concatenates repeated headers
-        if hdrv is not None:
-            out_rp_str += '%s: %s\r\n' % (hdrn, hdrv)
-    out_rp_str += '\r\n'
-    return out_rp_str
+        hdrn_lc = hdrn.lower()  # concatenate repeated headers
+        hdrv = ', '.join(v for (h, v) in res_h.headers if h.lower() == hdrn_lc)
+        if hdrv:
+            headers.append((hdrn, hdrv))
+    return _warchead.StatusAndHeaders(res_h.statusline, headers, res_h.protocol)
 
-def descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs):
-    # v0 descriptors only support HTTP exchanges,
-    # with compulsory response head metadata,
-    # and a single IPFS CID pointing to the body.
-    meta_http_rph = process_http_response(kwargs['meta_http_rph'])
-    desc = {
-        '!ouinet_version': 0,
-        'url': canonical_uri,
-        'id': str(uuid.uuid4()),
-        # The ``.000000`` is a work around a Boost limitation in date parsing
-        # where microsecond precision in extended ISO dates is compulsory.
-        # That limitation affects insertion in the Ouinet client.
-        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', time.gmtime()),
-        'head': meta_http_rph,
-        'body_link': data_ipfs_cid,
-    }
-    return desc
+def _digest_from_path(hash, path):
+    """Return the `hash` digest of the file at `path`.
 
-def descriptor_from_file(canonical_uri, data_path, **kwargs):
-    """Returns the descriptor and a hash of the data.
-
-    The descriptor is a mapping.  The hash is a string containing
-    the ASCII-encoded multihash provided by IPFS.
+    >>> import hashlib
+    >>> import tempfile
+    >>> with tempfile.NamedTemporaryFile() as tf:  # empty
+    ...     digest = _digest_from_path(hashlib.sha256, tf.name)
+    ...     print(base64.b64encode(digest))
+    ...
+    b'47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='
     """
+    buf = bytearray(4096)
+    h = hash()
+    with open(path, 'rb') as f:
+        l = f.readinto(buf)
+        while l:
+            h.update(buf[:l])
+            l = f.readinto(buf)
+    return h.digest()
 
+def _ipfs_cid_from_path(path):
     # This only computes and returns the CID, without seeding.
     # The daemon need not be running.
     # We may want to instead use native Python packages for this.
-    ipfs_add = subprocess.run(['ipfs', 'add', '-qn', data_path],
+    ipfs_add = subprocess.run(['ipfs', 'add', '-qn', path],
                               stdout=subprocess.PIPE, check=True)
-    data_ipfs_cid = ipfs_add.stdout.decode().strip()
-    desc = descriptor_from_ipfs(canonical_uri, data_ipfs_cid, **kwargs)
-    return (desc, data_ipfs_cid)
+    return ipfs_add.stdout.decode().strip()
+
+def descriptor_from_injection(inj):
+    """Returns the descriptor for a given injection (as a mapping)."""
+    # v0 descriptors only support HTTP exchanges,
+    # with compulsory response head metadata,
+    # and a single IPFS CID pointing to the body.
+    meta_http_res_h = inj.meta_http_res_h.to_ascii_bytes().decode()
+    desc = {
+        '!ouinet_version': 0,
+        'url': inj.uri,
+        'id': inj.id,
+        # The ``.000000`` is a work around a Boost limitation in date parsing
+        # where microsecond precision in extended ISO dates is compulsory.
+        # That limitation affects insertion in the Ouinet client.
+        'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000000Z', time.gmtime(inj.ts)),
+        'head': meta_http_res_h,
+        'body_link': inj.data_ipfs_cid,
+
+        # These are not part of the descriptor v0 spec,
+        # they are added to ease tools locate body data files.
+        'body_size': inj.data_size,
+        'body_digest': inj.data_digest,
+    }
+    return desc
 
 def index_key_from_http_url(canonical_url):
     return canonical_url
@@ -229,22 +236,173 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
         v=v
     ))
 
+_http_sigexclude = {
+    'content-length',
+    'transfer-encoding',
+    'trailer',
+}
+_http_sigfmt = (
+    'keyId="%s"'
+    ',algorithm="hs2019"'
+    ',created=%d'
+    ',headers="%s"'
+    ',signature="%s"'
+)
+
+def http_signature(res_h, priv_key, key_id, _ts=None):
+    ts = _ts if _ts else time.time()  # for testing
+
+    # Accumulate stripped values for repeated headers,
+    # while getting the list of headers in input order.
+    header_values = collections.defaultdict(
+        list, {'(created)': ['%d' % ts]})
+    headers = list(header_values.keys())
+    for (hn, hv) in res_h.headers:
+        (hn, hv) = (hn.lower(), hv.strip())
+        if hn in _http_sigexclude:
+            continue  # exclude framing headers
+        if hn not in header_values:
+            headers.append(hn)
+        header_values[hn].append(hv)
+
+    sig_string = '\n'.join('%s: %s' % (hn, ', '.join(header_values[hn]))
+                           for hn in headers).encode()  # only ASCII, RFC 7230#3.2.4
+    encoded_sig = base64.b64encode(priv_key.sign(sig_string)[:-len(sig_string)]).decode()
+
+    return _http_sigfmt % (key_id, ts, ' '.join(headers), encoded_sig)
+
+def http_key_id_for_injection(httpsig_pub_key):
+    # Extra check to avoid accidentally revealing a private key,
+    # since both private and public keys have an ``encode`` method.
+    if not hasattr(httpsig_pub_key, 'verify'):
+        raise TypeError("expected public key")
+    b64enc = nacl.encoding.Base64Encoder
+    return 'ed25519=' + httpsig_pub_key.encode(b64enc).decode()
+
+_hdr_pfx = 'X-Ouinet-'
+_hdr_version = _hdr_pfx + 'Version'
+_hdr_uri = _hdr_pfx + 'URI'
+_hdr_injection = _hdr_pfx + 'Injection'
+_hdr_http_status = _hdr_pfx + 'HTTP-Status'
+_hdr_data_size = _hdr_pfx + 'Data-Size'
+
+def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
+    r"""Get an HTTP head for an injection using an Ed25519 private key.
+
+    The result is returned as bytes.
+
+    >>> import io
+    >>> from base64 import b64encode as b64enc, b64decode as b64dec
+    >>> from hashlib import sha256
+    >>> from nacl.signing import SigningKey
+    >>> from warcio.statusandheaders import StatusAndHeadersParser as parser
+    >>>
+    >>> body = b'<!DOCTYPE html>\n<p>Tiny body here!</p>'
+    >>> b64_digest = b64enc(sha256(body).digest()).decode()
+    >>> b64_digest
+    'j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w='
+    >>>
+    >>> head_s = b'''\
+    ... HTTP/1.1 200 OK
+    ... Date: Mon, 15 Jan 2018 20:31:50 GMT
+    ... Server: Apache1
+    ... Content-Type: text/html
+    ... Content-Disposition: inline; filename="foo.html"
+    ... Content-Length: 38
+    ... Server: Apache2
+    ...
+    ... '''.replace(b'\n', b'\r\n')
+    >>> head = parser(['HTTP/1.0', 'HTTP/1.1']).parse(io.BytesIO(head_s))
+    >>>
+    >>> ts = 1516048310
+    >>> class inj:
+    ...     uri = 'https://example.com/foo'
+    ...     id = 'd6076384-2295-462b-a047-fe2c9274e58d'
+    ...     ts = ts
+    ...     data_size = len(body)
+    ...     data_digest = 'SHA-256=' + b64_digest
+    ...     meta_http_res_h = head
+    >>>
+    >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
+    >>> signed = http_inject(inj, sk, _ts=(ts + 1))
+    >>>
+    >>> signed_ref = b'''\
+    ... HTTP/1.1 200 OK
+    ... Date: Mon, 15 Jan 2018 20:31:50 GMT
+    ... Server: Apache1
+    ... Content-Type: text/html
+    ... Content-Disposition: inline; filename="foo.html"
+    ... Content-Length: 38
+    ... Server: Apache2
+    ... X-Ouinet-Version: 0
+    ... X-Ouinet-URI: https://example.com/foo
+    ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+    ... X-Ouinet-HTTP-Status: 200
+    ... X-Ouinet-Data-Size: 38
+    ... Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
+    ... Signature: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... algorithm="hs2019",created=1516048311,\
+    ... headers="(created) \
+    ... date server content-type content-disposition \
+    ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
+    ... x-ouinet-http-status x-ouinet-data-size \
+    ... digest",\
+    ... signature="ZHjVsSXaXBi9WyYfXWi9Hi0dh/pW5oMqYoS3U2Gm9+Bf8vFj8REL4dwwTYYPyt3OfHD3JVEN8Icf05nG3qEHDg=="
+    ...
+    ... '''.replace(b'\n', b'\r\n')
+    >>> signed == signed_ref
+    True
+    """
+    res = inj.meta_http_res_h
+    to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
+    to_sign.add_header(_hdr_version, str(0))
+    to_sign.add_header(_hdr_uri, inj.uri)
+    to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
+    to_sign.add_header(_hdr_http_status, to_sign.get_statuscode())
+    to_sign.add_header(_hdr_data_size, str(inj.data_size))
+    to_sign.add_header('Digest', inj.data_digest)
+    if not httpsig_key_id:
+        httpsig_key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)
+    signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
+    to_sign.add_header('Signature', signature)
+    return to_sign.to_ascii_bytes()
+
 def get_canonical_uri(uri):
     return uri  # TODO
 
-def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
-    """Create descriptor and insertion data for the injection of the `uri`.
+class Injection:
+    pass  # just a dummy container
 
-    A tuple is returned with the serialized descriptor (as bytes),
-    a multihash of the data (as a string),
-    and a dictionary mapping the different index names to
-    their respective serialized insertion data (as bytes).
+def inject_uri(uri, data_path,
+               bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None,
+               meta_http_res_h=None, **kwargs):
+    """Create injection data for the injection of the `uri`.
+
+    A tuple is returned with
+    a dictionary mapping different injection data tags to
+    their respective serialized data (as bytes),
+    and a digest of the data itself (as bytes).
     """
 
+    # Prepare the injection.
+    inj = Injection()
+    inj.uri = get_canonical_uri(uri)
+    inj.id = str(uuid.uuid4())
+    inj.ts = time.time()
+    inj.data_size = os.path.getsize(data_path)
+    data_digest = _digest_from_path(hashlib.sha256, data_path)
+    inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
+    inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
+    if meta_http_res_h:
+        inj.meta_http_res_h = to_cache_response(meta_http_res_h)
+    for (k, v) in kwargs.items():  # other stuff like metadata
+        setattr(inj, k, v)
+
+    inj_data = {}
+
     # Generate the descriptor.
-    curi = get_canonical_uri(uri)
-    logger.debug("creating descriptor for URI: %s", curi)
-    (desc, data_mhash) = descriptor_from_file(curi, data_path, **kwargs)
+    logger.debug("creating descriptor for URI: %s", inj.uri)
+    desc = descriptor_from_injection(inj)
 
     # Serialize the descriptor for index insertion.
     desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
@@ -253,21 +411,32 @@ def inject_uri(uri, data_path, bep44_priv_key=None, **kwargs):
                               stdout=subprocess.PIPE, check=True)
     desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
     desc_inline = b'/zlib/' + zlib.compress(desc_data)
+    inj_data[DESC_TAG] = desc_data
 
     # Prepare insertion of the descriptor into indexes.
-    index_key = index_key_from_http_url(curi)
-    ins_data = {}
+    index_key = index_key_from_http_url(inj.uri)
     if bep44_priv_key:
-        logger.debug("creating BEP44 insertion data for URI: %s", curi)
-        ins_data['bep44'] = bep44_insert(index_key, desc_link, desc_inline, bep44_priv_key)
+        logger.debug("creating BEP44 insertion data for URI: %s", inj.uri)
+        inj_data[INS_TAG_PFX + 'bep44'] = bep44_insert(
+            index_key, desc_link, desc_inline, bep44_priv_key)
 
-    return (desc_data, data_mhash, ins_data)
+    # Create a signed HTTP response head.
+    if httpsig_priv_key:
+        logger.debug("creating HTTP signature for URI: %s", inj.uri)
+        inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
 
-def inject_dir(input_dir, output_dir, bep44_priv_key=None):
+    return (inj_data, data_digest)
+
+def inject_dir(input_dir, output_dir,
+               bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
 
     `bep44_priv_key` is the Ed25519 private key to be used to
     sign insertions into the BEP44 index.
+
+    `httpsig_priv_key` is the Ed25519 private key to be used to
+    create HTTP signatures.
+    `httpsig_key_id` is an identifier for that key in signatures.
 
     Limitations:
 
@@ -278,12 +447,12 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
     somewhere under `input_dir` there must exist:
 
     - ``NAME.uri`` with the URI itself; the ``NAME`` is not relevant
-    - ``NAME.http-rph`` with the head of the HTTP GET response
+    - ``NAME.http-res-h`` with the head of the HTTP GET response
     - ``NAME.data`` with the body of the HTTP GET response
       (after transfer decoding if a non-identity transfer encoding was used)
 
     The HTTP GET response head will be processed, thus the head in
-    the resulting descriptor may differ from that in the ``.http-rph`` file.
+    the resulting descriptor may differ from that in the ``.http-res-h`` file.
 
     See `save_uri_injection()` for more information on
     the storage of injections in `output_dir`.
@@ -300,19 +469,19 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
 
             urip = uri_prefix + URI_FILE_EXT
             datap = uri_prefix + DATA_FILE_EXT
-            http_rphp = uri_prefix + HTTP_RPH_FILE_EXT
+            http_res_hp = uri_prefix + HTTP_RES_H_FILE_EXT
 
             if not os.path.exists(datap):
                 logger.warning("skipping URI with missing data file: %s", urip)
                 continue  # data file must exist even if empty
 
-            if not os.path.exists(http_rphp):
+            if not os.path.exists(http_res_hp):
                 logger.warning("skipping URI with missing HTTP response head: %s", urip)
                 continue  # only handle HTTP insertion for the moment
 
-            with open(urip, 'rb') as urif, open(http_rphp, 'rb') as http_rphf:
+            with open(urip, 'rb') as urif, open(http_res_hp, 'rb') as http_res_hf:
                 uri = urif.read().decode()  # only ASCII, RFC 3986#1.2.1
-                http_headers = http_parse(http_rphf)
+                http_headers = http_parse(http_res_hf)
 
             # We use the identity-encoded body to
             # make it self-standing and more amenable to seeding in other systems.
@@ -326,7 +495,9 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
             if not txenc and not ctenc:
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
-                                   meta_http_rph=http_headers.to_str())
+                                   httpsig_priv_key=httpsig_priv_key,
+                                   httpsig_key_id=httpsig_key_id,
+                                   meta_http_res_h=http_headers)
                 continue
 
             # Extract body data to a temporary file in the output directory,
@@ -343,12 +514,15 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None):
 
                 datap = os.path.join(output_dir, dataf.name)
                 # Use length of identity-encoded data.
-                http_headers.replace_header('Content-Length', str(os.stat(datap).st_size))
+                http_headers.replace_header('Content-Length', str(os.path.getsize(datap)))
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
-                                   meta_http_rph=http_headers.to_str())
+                                   httpsig_priv_key=httpsig_priv_key,
+                                   httpsig_key_id=httpsig_key_id,
+                                   meta_http_res_h=http_headers)
 
-def inject_warc(warc_file, output_dir, bep44_priv_key=None):
+def inject_warc(warc_file, output_dir,
+                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
     # For marking GET requests pointed to by responses.
     seen_get_req = set()
     # For marking responses pointed to by GET requests.
@@ -377,14 +551,14 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             record.http_headers.remove_header('Transfer-Encoding')
             record.http_headers.remove_header('Content-Encoding')
             record.http_headers.replace_header('Content-Length', str(len(body)))
-            http_rph = record.http_headers.to_str()
+            http_res_h = record.http_headers
 
             resp_id = record.rec_headers.get_header('WARC-Record-ID')
             req_id = record.rec_headers.get_header('WARC-Concurrent-To')
             if req_id in seen_get_req:
                 seen_get_req.remove(req_id)
             elif resp_id not in seen_get_resp:
-                seen_get_resp[resp_id] = (uri, http_rph, body)  # delay until GET confirmation
+                seen_get_resp[resp_id] = (uri, http_res_h, body)  # delay until GET confirmation
                 continue
             # GET previously confirmed, proceed.
             seen_get_resp.pop(resp_id, None)
@@ -399,7 +573,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
                 seen_get_resp[resp_id] = None  # confirm GET, pending response
                 continue
             # GET confirmed, pop out response info and process it.
-            (uri, http_rph, body) = seen_get_resp.pop(resp_id)
+            (uri, http_res_h, body) = seen_get_resp.pop(resp_id)
 
         else:  # ignore other kinds of records
             continue
@@ -415,11 +589,13 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None):
             datap = os.path.join(output_dir, dataf.name)
             save_uri_injection(uri, datap, output_dir,
                                bep44_priv_key=bep44_priv_key,
-                               meta_http_rph=http_rph)
+                               httpsig_priv_key=httpsig_priv_key,
+                               httpsig_key_id=httpsig_key_id,
+                               meta_http_res_h=http_res_h)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
-def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs):
+def save_uri_injection(uri, data_path, output_dir, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
 
     This is only done if insertion data is not already present for the `uri`
@@ -434,38 +610,46 @@ def save_uri_injection(uri, data_path, output_dir, bep44_priv_key=None, **kwargs
     _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), DATA_DIR_INFO)
 
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
-    descp = desc_path_from_uri_hash(uri_hash, output_dir)
-    if os.path.exists(descp):
-        logger.info("skipping URI with existing descriptor: %s", uri)
+    inj_prefix = inj_prefix_from_uri_hash(uri_hash, output_dir)
+    if glob.glob(inj_prefix + '.*'):
+        logger.info("skipping URI with existing injection: %s", uri)
         return  # a descriptor for the URI already exists
 
     # After all the previous checks, proceed to the real injection.
-    (desc_data, data_mhash, inj_data) = inject_uri(
-        uri, data_path, bep44_priv_key=bep44_priv_key, **kwargs
-    )
+    (inj_data, data_digest) = inject_uri(uri, data_path, **kwargs)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
-    desc_dir = os.path.dirname(descp)
-    os.makedirs(desc_dir, exist_ok=True)
-    with open(descp, 'wb') as descf:
-        logger.debug("writing descriptor: uri_hash=%s", uri_hash)
-        descf.write(desc_data)
-    desc_prefix = os.path.splitext(descp)[0]
-    for (idx, idx_inj_data) in inj_data.items():
-        with open(desc_prefix + INS_FILE_EXT_PFX + idx, 'wb') as injf:
-            logger.debug("writing insertion data (%s): uri_hash=%s", idx, uri_hash)
-            injf.write(idx_inj_data)
+    inj_dir = os.path.dirname(inj_prefix)
+    os.makedirs(inj_prefix, exist_ok=True)
+    for (itag, idata) in inj_data.items():
+        with open('%s.%s' % (inj_prefix, itag), 'wb') as injf:
+            logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
+            injf.write(idata)
 
     # Hard-link the data file (if not already there).
     # TODO: look for better options
     # TODO: handle exceptions
-    out_data_path = data_path_from_data_mhash(data_mhash, output_dir)
+    out_data_path = data_path_from_data_digest(data_digest, output_dir)
     if not os.path.exists(out_data_path):
         out_data_dir = os.path.dirname(out_data_path)
         os.makedirs(out_data_dir, exist_ok=True)
         logger.debug("linking data file: uri_hash=%s", uri_hash)
         os.link(data_path, out_data_path)
+
+def _private_key_from_arg(priv_key):
+    """Return the Ed25519 private key in command-line argument `priv_key`.
+
+    Return `None` if no key is specified.
+    """
+    if os.path.sep in priv_key:  # path to file with key
+        logger.debug("loading private key from file: %s", priv_key)
+        with open(priv_key) as kf:
+            priv_key = kf.read().strip()
+    if priv_key:  # decode key
+        priv_key = nacl.signing.SigningKey(
+            nacl.signing.SignedMessage.fromhex(priv_key))
+        return priv_key
 
 def main():
     parser = argparse.ArgumentParser(
@@ -474,6 +658,13 @@ def main():
         '--bep44-private-key', metavar="KEY", default='',
         help=("hex-encoded private key for BEP44 index insertion; "
               "if KEY contains '{0}' (e.g. '.{0}bep44.key'), "
+              "handle as a file containing the encoded key".format(
+                  os.path.sep
+              )))
+    parser.add_argument(
+        '--httpsig-private-key', metavar="KEY", default='',
+        help=("hex-encoded private key for HTTP signatures; "
+              "if KEY contains '{0}' (e.g. '.{0}httpsig.key'), "
               "handle as a file containing the encoded key".format(
                   os.path.sep
               )))
@@ -488,26 +679,26 @@ def main():
         help="the directory where content data, descriptors and insertion data will be saved to")
     args = parser.parse_args()
 
-    # Retrieve the BEP44 private key from disk or argument.
-    bep44_priv_key = args.bep44_private_key
-    if os.path.sep in bep44_priv_key:  # path to file with key
-        logger.debug("loading BEP44 private key from file: %s", bep44_priv_key)
-        with open(bep44_priv_key) as b44kf:
-            bep44_priv_key = b44kf.read().strip()
-    if bep44_priv_key:  # decode key
-        bep44_priv_key = nacl.signing.SigningKey(
-            nacl.signing.SignedMessage.fromhex(bep44_priv_key))
-        bep44_pub_key = bep44_priv_key.verify_key
-        logger.info("BEP44 index public key: %s",
-                    bep44_pub_key.encode(nacl.encoding.HexEncoder).decode())
+    # Retrieve private keys from disk or arguments.
+    bep44_sk = _private_key_from_arg(args.bep44_private_key)
+    httpsig_sk = _private_key_from_arg(args.httpsig_private_key)
+    httpsig_kid = None
+    sk2pkhex = lambda sk: sk.verify_key.encode(nacl.encoding.HexEncoder).decode()
+    if bep44_sk:
+        logger.info("BEP44 index public key: %s", sk2pkhex(bep44_sk))
+    if httpsig_sk:
+        logger.info("HTTP signatures public key: %s", sk2pkhex(httpsig_sk))
+        httpsig_kid = http_key_id_for_injection(httpsig_sk.verify_key)
 
     if os.path.isdir(args.input):
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
-                   bep44_priv_key=bep44_priv_key)
+                   bep44_priv_key=bep44_sk,
+                   httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     else:
         with open(args.input, 'rb') as warcf:
             inject_warc(warcf, args.output_directory,
-                        bep44_priv_key=bep44_priv_key)
+                        bep44_priv_key=bep44_sk,
+                        httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s',
