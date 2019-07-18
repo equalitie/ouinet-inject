@@ -254,9 +254,10 @@ def http_signature(res_h, priv_key, key_id, _ts=None):
 
     # Accumulate stripped values for repeated headers,
     # while getting the list of headers in input order.
-    header_values = collections.defaultdict(
-        list, {'(created)': ['%d' % ts]})
-    headers = list(header_values.keys())
+    pseudo_headers = [('(response-status)', [res_h.get_statuscode()]),
+                      ('(created)', ['%d' % ts])]  # keeps order
+    header_values = collections.defaultdict(list, pseudo_headers)
+    headers = [hn for (hn, _) in pseudo_headers]
     for (hn, hv) in res_h.headers:
         (hn, hv) = (hn.lower(), hv.strip())
         if hn in _http_sigexclude:
@@ -283,7 +284,6 @@ _hdr_pfx = 'X-Ouinet-'
 _hdr_version = _hdr_pfx + 'Version'
 _hdr_uri = _hdr_pfx + 'URI'
 _hdr_injection = _hdr_pfx + 'Injection'
-_hdr_http_status = _hdr_pfx + 'HTTP-Status'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
 
 def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
@@ -337,17 +337,16 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... X-Ouinet-Version: 0
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
-    ... X-Ouinet-HTTP-Status: 200
     ... X-Ouinet-Data-Size: 38
     ... Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
     ... Signature: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
     ... algorithm="hs2019",created=1516048311,\
-    ... headers="(created) \
+    ... headers="(response-status) (created) \
     ... date server content-type content-disposition \
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
-    ... x-ouinet-http-status x-ouinet-data-size \
+    ... x-ouinet-data-size \
     ... digest",\
-    ... signature="ZHjVsSXaXBi9WyYfXWi9Hi0dh/pW5oMqYoS3U2Gm9+Bf8vFj8REL4dwwTYYPyt3OfHD3JVEN8Icf05nG3qEHDg=="
+    ... signature="wpxnlch8wwAgEne8ilmG4HtgMwKjSm063IlF1/TS8FEqEBAES1LEcQmsSGHuPEmFdzJ4JRnERkHFO49gfQG7BQ=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed == signed_ref
@@ -358,7 +357,6 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     to_sign.add_header(_hdr_version, str(0))
     to_sign.add_header(_hdr_uri, inj.uri)
     to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
-    to_sign.add_header(_hdr_http_status, to_sign.get_statuscode())
     to_sign.add_header(_hdr_data_size, str(inj.data_size))
     to_sign.add_header('Digest', inj.data_digest)
     if not httpsig_key_id:
