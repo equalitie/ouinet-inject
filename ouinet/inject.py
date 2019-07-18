@@ -286,7 +286,7 @@ _hdr_injection = _hdr_pfx + 'Injection'
 _hdr_http_status = _hdr_pfx + 'HTTP-Status'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
 
-def http_inject(inj, httpsig_priv_key, _ts=None):
+def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     r"""Get an HTTP head for an injection using an Ed25519 private key.
 
     The result is returned as bytes.
@@ -361,8 +361,9 @@ def http_inject(inj, httpsig_priv_key, _ts=None):
     to_sign.add_header(_hdr_http_status, to_sign.get_statuscode())
     to_sign.add_header(_hdr_data_size, str(inj.data_size))
     to_sign.add_header('Digest', inj.data_digest)
-    key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)  # TODO: cache this
-    signature = http_signature(to_sign, httpsig_priv_key, key_id, _ts=_ts)
+    if not httpsig_key_id:
+        httpsig_key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)
+    signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header('Signature', signature)
     return to_sign.to_ascii_bytes()
 
@@ -372,7 +373,8 @@ def get_canonical_uri(uri):
 class Injection:
     pass  # just a dummy container
 
-def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
+def inject_uri(uri, data_path,
+               bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None,
                meta_http_res_h=None, **kwargs):
     """Create injection data for the injection of the `uri`.
 
@@ -421,11 +423,12 @@ def inject_uri(uri, data_path, bep44_priv_key=None, httpsig_priv_key=None,
     # Create a signed HTTP response head.
     if httpsig_priv_key:
         logger.debug("creating HTTP signature for URI: %s", inj.uri)
-        inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key)
+        inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
 
     return (inj_data, data_digest)
 
-def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None):
+def inject_dir(input_dir, output_dir,
+               bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
 
     `bep44_priv_key` is the Ed25519 private key to be used to
@@ -433,6 +436,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
 
     `httpsig_priv_key` is the Ed25519 private key to be used to
     create HTTP signatures.
+    `httpsig_key_id` is an identifier for that key in signatures.
 
     Limitations:
 
@@ -492,6 +496,7 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
                                    httpsig_priv_key=httpsig_priv_key,
+                                   httpsig_key_id=httpsig_key_id,
                                    meta_http_res_h=http_headers)
                 continue
 
@@ -513,9 +518,11 @@ def inject_dir(input_dir, output_dir, bep44_priv_key=None, httpsig_priv_key=None
                 save_uri_injection(uri, datap, output_dir,
                                    bep44_priv_key=bep44_priv_key,
                                    httpsig_priv_key=httpsig_priv_key,
+                                   httpsig_key_id=httpsig_key_id,
                                    meta_http_res_h=http_headers)
 
-def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=None):
+def inject_warc(warc_file, output_dir,
+                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
     # For marking GET requests pointed to by responses.
     seen_get_req = set()
     # For marking responses pointed to by GET requests.
@@ -583,6 +590,7 @@ def inject_warc(warc_file, output_dir, bep44_priv_key=None, httpsig_priv_key=Non
             save_uri_injection(uri, datap, output_dir,
                                bep44_priv_key=bep44_priv_key,
                                httpsig_priv_key=httpsig_priv_key,
+                               httpsig_key_id=httpsig_key_id,
                                meta_http_res_h=http_res_h)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
@@ -674,19 +682,23 @@ def main():
     # Retrieve private keys from disk or arguments.
     bep44_sk = _private_key_from_arg(args.bep44_private_key)
     httpsig_sk = _private_key_from_arg(args.httpsig_private_key)
+    httpsig_kid = None
     sk2pkhex = lambda sk: sk.verify_key.encode(nacl.encoding.HexEncoder).decode()
     if bep44_sk:
         logger.info("BEP44 index public key: %s", sk2pkhex(bep44_sk))
     if httpsig_sk:
         logger.info("HTTP signatures public key: %s", sk2pkhex(httpsig_sk))
+        httpsig_kid = http_key_id_for_injection(httpsig_sk.verify_key)
 
     if os.path.isdir(args.input):
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
-                   bep44_priv_key=bep44_sk, httpsig_priv_key=httpsig_sk)
+                   bep44_priv_key=bep44_sk,
+                   httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     else:
         with open(args.input, 'rb') as warcf:
             inject_warc(warcf, args.output_directory,
-                        bep44_priv_key=bep44_sk, httpsig_priv_key=httpsig_sk)
+                        bep44_priv_key=bep44_sk,
+                        httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s',
