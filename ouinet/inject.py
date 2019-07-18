@@ -271,9 +271,13 @@ def http_signature(res_h, priv_key, key_id, _ts=None):
 
     return _http_sigfmt % (key_id, ts, ' '.join(headers), encoded_sig)
 
-def http_key_id_for_injection(httpsig_priv_key):
+def http_key_id_for_injection(httpsig_pub_key):
+    # Extra check to avoid accidentally revealing a private key,
+    # since both private and public keys have an ``encode`` method.
+    if not hasattr(httpsig_pub_key, 'verify'):
+        raise TypeError("expected public key")
     b64enc = nacl.encoding.Base64Encoder
-    return 'ed25519=' + httpsig_priv_key.verify_key.encode(b64enc).decode()
+    return 'ed25519=' + httpsig_pub_key.encode(b64enc).decode()
 
 _hdr_pfx = 'X-Ouinet-'
 _hdr_version = _hdr_pfx + 'Version'
@@ -357,7 +361,7 @@ def http_inject(inj, httpsig_priv_key, _ts=None):
     to_sign.add_header(_hdr_http_status, to_sign.get_statuscode())
     to_sign.add_header(_hdr_data_size, str(inj.data_size))
     to_sign.add_header('Digest', inj.data_digest)
-    key_id = http_key_id_for_injection(httpsig_priv_key)  # TODO: cache this
+    key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)  # TODO: cache this
     signature = http_signature(to_sign, httpsig_priv_key, key_id, _ts=_ts)
     to_sign.add_header('Signature', signature)
     return to_sign.to_ascii_bytes()
