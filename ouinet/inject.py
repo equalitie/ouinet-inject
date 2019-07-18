@@ -236,6 +236,11 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
         v=v
     ))
 
+_http_sigexclude = {
+    'content-length',
+    'transfer-encoding',
+    'trailer',
+}
 _http_sigfmt = (
     'keyId="%s"'
     ',algorithm="hs2019"'
@@ -254,6 +259,8 @@ def http_signature(res_h, priv_key, key_id, _ts=None):
     headers = list(header_values.keys())
     for (hn, hv) in res_h.headers:
         (hn, hv) = (hn.lower(), hv.strip())
+        if hn in _http_sigexclude:
+            continue  # exclude framing headers
         if hn not in header_values:
             headers.append(hn)
         header_values[hn].append(hv)
@@ -332,11 +339,11 @@ def http_inject(inj, httpsig_priv_key, _ts=None):
     ... Signature: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
     ... algorithm="hs2019",created=1516048311,\
     ... headers="(created) \
-    ... date server content-type content-disposition content-length \
+    ... date server content-type content-disposition \
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
     ... x-ouinet-http-status x-ouinet-data-size \
     ... digest",\
-    ... signature="ltqzwMrXQBXfpjG9CbN64veuutJNTWLMW3zhWmJSsOfpsi+celTEPYYLC4n5ykrEovhI6MFPCmkJxf9dlDS9DA=="
+    ... signature="ZHjVsSXaXBi9WyYfXWi9Hi0dh/pW5oMqYoS3U2Gm9+Bf8vFj8REL4dwwTYYPyt3OfHD3JVEN8Icf05nG3qEHDg=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed == signed_ref
