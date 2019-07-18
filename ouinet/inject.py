@@ -324,7 +324,7 @@ def http_inject(inj, httpsig_priv_key, _ts=None):
     ...     meta_http_res_h = head
     >>>
     >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
-    >>> signed = http_inject(inj, sk, ts + 1)
+    >>> signed = http_inject(inj, sk, _ts=(ts + 1))
     >>>
     >>> signed_ref = b'''\
     ... HTTP/1.1 200 OK
