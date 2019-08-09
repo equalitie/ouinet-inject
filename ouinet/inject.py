@@ -285,6 +285,7 @@ _hdr_version = _hdr_pfx + 'Version'
 _hdr_uri = _hdr_pfx + 'URI'
 _hdr_injection = _hdr_pfx + 'Injection'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
+_hdr_sig0 = _hdr_pfx + 'Sig0'
 
 def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     r"""Get an HTTP head for an injection using an Ed25519 private key.
@@ -339,7 +340,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     ... X-Ouinet-Data-Size: 38
     ... Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
-    ... Signature: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... X-Ouinet-Sig0: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
     ... algorithm="hs2019",created=1516048311,\
     ... headers="(response-status) (created) \
     ... date server content-type content-disposition \
@@ -362,7 +363,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     if not httpsig_key_id:
         httpsig_key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)
     signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
-    to_sign.add_header('Signature', signature)
+    to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
 def get_canonical_uri(uri):
