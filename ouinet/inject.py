@@ -298,10 +298,10 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     >>> from nacl.signing import SigningKey
     >>> from warcio.statusandheaders import StatusAndHeadersParser as parser
     >>>
-    >>> body = b'<!DOCTYPE html>\n<p>Tiny body here!</p>'
+    >>> body = b'x' * 128 * 1024 + b'abcd'
     >>> b64_digest = b64enc(sha256(body).digest()).decode()
     >>> b64_digest
-    'j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w='
+    'PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs='
     >>>
     >>> head_s = b'''\
     ... HTTP/1.1 200 OK
@@ -309,7 +309,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Server: Apache1
     ... Content-Type: text/html
     ... Content-Disposition: inline; filename="foo.html"
-    ... Content-Length: 38
+    ... Content-Length: 131076
     ... Server: Apache2
     ...
     ... '''.replace(b'\n', b'\r\n')
@@ -333,13 +333,13 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Server: Apache1
     ... Content-Type: text/html
     ... Content-Disposition: inline; filename="foo.html"
-    ... Content-Length: 38
+    ... Content-Length: 131076
     ... Server: Apache2
     ... X-Ouinet-Version: 0
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
-    ... X-Ouinet-Data-Size: 38
-    ... Digest: SHA-256=j7uwtB/QQz0FJONbkyEmaqlJwGehJLqWoCO1ceuM30w=
+    ... X-Ouinet-Data-Size: 131076
+    ... Digest: SHA-256=PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=
     ... X-Ouinet-Sig0: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
     ... algorithm="hs2019",created=1516048311,\
     ... headers="(response-status) (created) \
@@ -347,7 +347,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
     ... x-ouinet-data-size \
     ... digest",\
-    ... signature="wpxnlch8wwAgEne8ilmG4HtgMwKjSm063IlF1/TS8FEqEBAES1LEcQmsSGHuPEmFdzJ4JRnERkHFO49gfQG7BQ=="
+    ... signature="Yy3xLabSa2me5UpzwFVFqDYSXZbh5dGmKRxA6UqO8J+GEPnR9vEuc6yH0HvGK0THp6ZeuFpu69fYxpgSI45OBg=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed == signed_ref
