@@ -382,7 +382,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     return to_sign.to_ascii_bytes()
 
 def block_signatures(inj, data_path, httpsig_priv_key):
-    """Return block signatures for the given injection.
+    r"""Return block signatures for the given injection.
 
     Signatures are returned as bytes.
 
