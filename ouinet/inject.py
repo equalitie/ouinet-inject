@@ -26,7 +26,7 @@ import warcio.archiveiterator
 import warcio.bufferedreaders as _warcbuf
 import warcio.statusandheaders as _warchead
 
-from ouinet.util.http_sign import signature as _http_signature
+from ouinet.util import http_signature
 
 
 OUINET_DIR_NAME = '.ouinet'
@@ -342,7 +342,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
         to_sign.add_header(_hdr_bsigs, _http_bsigsfmt % (httpsig_key_id, inj.block_size))
     to_sign.add_header(_hdr_data_size, str(inj.data_size))
     to_sign.add_header('Digest', inj.data_digest)
-    signature = _http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
+    signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
