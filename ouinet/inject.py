@@ -5,7 +5,6 @@
 import argparse
 import base64
 import codecs
-import collections
 import glob
 import hashlib
 import io
@@ -27,6 +26,8 @@ import warcio.archiveiterator
 import warcio.bufferedreaders as _warcbuf
 import warcio.statusandheaders as _warchead
 
+from ouinet.util import http_signature
+
 
 OUINET_DIR_NAME = '.ouinet'
 URI_FILE_EXT = '.uri'
@@ -36,6 +37,7 @@ HTTP_RES_H_FILE_EXT = '.http-res-h'
 DESC_TAG = 'desc'
 INS_TAG_PFX = 'ins-'
 HTTP_SIG_TAG = 'http-res-h'
+BLOCK_SIGS_TAG = 'bsigs'
 
 DATA_DIR_NAME = 'ouinet-data'
 
@@ -224,7 +226,7 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
 
     # Sign, build exported message fields and encode the result.
     # We follow the names used in the BEP44 document.
-    sig = priv_key.sign(sigbuf)[:-len(sigbuf)]  # remove trailing signed message
+    sig = priv_key.sign(sigbuf).signature
     return bencoder.bencode(dict(
         # cas is not compulsory
         # id depends on the publishing node
@@ -235,42 +237,6 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
         sig=sig,
         v=v
     ))
-
-_http_sigexclude = {
-    'content-length',
-    'transfer-encoding',
-    'trailer',
-}
-_http_sigfmt = (
-    'keyId="%s"'
-    ',algorithm="hs2019"'
-    ',created=%d'
-    ',headers="%s"'
-    ',signature="%s"'
-)
-
-def http_signature(res_h, priv_key, key_id, _ts=None):
-    ts = _ts if _ts else time.time()  # for testing
-
-    # Accumulate stripped values for repeated headers,
-    # while getting the list of headers in input order.
-    pseudo_headers = [('(response-status)', [res_h.get_statuscode()]),
-                      ('(created)', ['%d' % ts])]  # keeps order
-    header_values = collections.defaultdict(list, pseudo_headers)
-    headers = [hn for (hn, _) in pseudo_headers]
-    for (hn, hv) in res_h.headers:
-        (hn, hv) = (hn.lower(), hv.strip())
-        if hn in _http_sigexclude:
-            continue  # exclude framing headers
-        if hn not in header_values:
-            headers.append(hn)
-        header_values[hn].append(hv)
-
-    sig_string = '\n'.join('%s: %s' % (hn, ', '.join(header_values[hn]))
-                           for hn in headers).encode()  # only ASCII, RFC 7230#3.2.4
-    encoded_sig = base64.b64encode(priv_key.sign(sig_string)[:-len(sig_string)]).decode()
-
-    return _http_sigfmt % (key_id, ts, ' '.join(headers), encoded_sig)
 
 def http_key_id_for_injection(httpsig_pub_key):
     # Extra check to avoid accidentally revealing a private key,
@@ -284,8 +250,14 @@ _hdr_pfx = 'X-Ouinet-'
 _hdr_version = _hdr_pfx + 'Version'
 _hdr_uri = _hdr_pfx + 'URI'
 _hdr_injection = _hdr_pfx + 'Injection'
+_hdr_bsigs = _hdr_pfx + 'BSigs'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
 _hdr_sig0 = _hdr_pfx + 'Sig0'
+_http_bsigsfmt = (
+    'keyId="%s"'
+    ',algorithm="hs2019"'
+    ',size=%d'
+)
 
 def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     r"""Get an HTTP head for an injection using an Ed25519 private key.
@@ -298,10 +270,13 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     >>> from nacl.signing import SigningKey
     >>> from warcio.statusandheaders import StatusAndHeadersParser as parser
     >>>
-    >>> body = b'x' * 128 * 1024 + b'abcd'
+    >>> bs = 65536
+    >>> body = (b'0123' + b'x' * (bs - 8) + b'4567'
+    ...         + b'89AB' + b'x' * (bs - 8) + b'CDEF'
+    ...         + b'abcd')
     >>> b64_digest = b64enc(sha256(body).digest()).decode()
     >>> b64_digest
-    'PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs='
+    'E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE='
     >>>
     >>> head_s = b'''\
     ... HTTP/1.1 200 OK
@@ -322,6 +297,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ...     ts = ts
     ...     data_size = len(body)
     ...     data_digest = 'SHA-256=' + b64_digest
+    ...     block_size = bs
     ...     meta_http_res_h = head
     >>>
     >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
@@ -335,19 +311,21 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Content-Disposition: inline; filename="foo.html"
     ... Content-Length: 131076
     ... Server: Apache2
-    ... X-Ouinet-Version: 0
+    ... X-Ouinet-Version: 3
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+    ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... algorithm="hs2019",size=65536
     ... X-Ouinet-Data-Size: 131076
-    ... Digest: SHA-256=PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=
+    ... Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=
     ... X-Ouinet-Sig0: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
     ... algorithm="hs2019",created=1516048311,\
     ... headers="(response-status) (created) \
     ... date server content-type content-disposition \
-    ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
+    ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs \
     ... x-ouinet-data-size \
     ... digest",\
-    ... signature="Yy3xLabSa2me5UpzwFVFqDYSXZbh5dGmKRxA6UqO8J+GEPnR9vEuc6yH0HvGK0THp6ZeuFpu69fYxpgSI45OBg=="
+    ... signature="h/PmOlFvScNzDAUvV7tLNjoA0A39OL67/9wbfrzqEY7j47IYVe1ipXuhhCfTnPeCyXBKiMlc4BP+nf0VmYzoAw=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed == signed_ref
@@ -355,22 +333,92 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     """
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
-    to_sign.add_header(_hdr_version, str(0))
+    to_sign.add_header(_hdr_version, str(3))
     to_sign.add_header(_hdr_uri, inj.uri)
     to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
-    to_sign.add_header(_hdr_data_size, str(inj.data_size))
-    to_sign.add_header('Digest', inj.data_digest)
     if not httpsig_key_id:
         httpsig_key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)
+    if getattr(inj, 'block_size', 0) > 0:
+        to_sign.add_header(_hdr_bsigs, _http_bsigsfmt % (httpsig_key_id, inj.block_size))
+    to_sign.add_header(_hdr_data_size, str(inj.data_size))
+    to_sign.add_header('Digest', inj.data_digest)
     signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
+
+def block_signatures(inj, data_path, httpsig_priv_key):
+    r"""Return block signatures for the given injection.
+
+    Signatures are returned as bytes.  Each line in the result contains the
+    hexadecimal offset of the block, a space character, the Base64-encoded
+    signature for the block, a space character, the Base64-encoded chain hash
+    for the block, and a new line character.
+
+    If the injection does not enable block signatures, return `None`.
+
+    >>> from tempfile import NamedTemporaryFile as mktemp
+    >>> from base64 import b64decode as b64dec
+    >>> from nacl.signing import SigningKey
+    >>>
+    >>> bs = 65536
+    >>> body = (b'0123' + b'x' * (bs - 8) + b'4567'
+    ...         + b'89AB' + b'x' * (bs - 8) + b'CDEF'
+    ...         + b'abcd')
+    >>>
+    >>> class inj:
+    ...     id = 'd6076384-2295-462b-a047-fe2c9274e58d'
+    ...     block_size = bs
+    >>>
+    >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
+    >>> with mktemp() as data:
+    ...     _ = data.write(body)
+    ...     _ = data.seek(0)
+    ...     bsigs = block_signatures(inj, data.name, sk)
+    ...
+    >>> bsigs_ref = b'''\
+    ... 0\
+    ...  AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==\
+    ...  aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==
+    ... 10000\
+    ...  c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==\
+    ...  slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==
+    ... 20000\
+    ...  m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==\
+    ...  vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==
+    ... '''
+    >>> bsigs == bsigs_ref
+    True
+    """
+    block_size = getattr(inj, 'block_size', 0)
+    if block_size <= 0:
+        return None
+
+    bsigs = io.BytesIO()
+    b64enc = base64.b64encode
+    sig_str_pfx = b'%s\x00' % inj.id.encode()
+    with open(data_path, 'rb') as dataf:
+        block_offset = 0
+        block_digest = None
+        buf = bytearray(block_size)
+        l = dataf.readinto(buf)
+        while l:
+            block_hash = hashlib.sha512(block_digest or b'')
+            block_hash.update(buf[:l])
+            block_digest = block_hash.digest()
+            bsig = httpsig_priv_key.sign(sig_str_pfx + block_digest).signature
+            bsigs.write(b'%x %s %s\n' % (block_offset, b64enc(bsig), b64enc(block_digest)))
+            block_offset += l
+            l = dataf.readinto(buf)
+
+    return bsigs.getvalue()
 
 def get_canonical_uri(uri):
     return uri  # TODO
 
 class Injection:
     pass  # just a dummy container
+
+_inject_block_size_default = 65536  # bytes
 
 def inject_uri(uri, data_path,
                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None,
@@ -392,6 +440,7 @@ def inject_uri(uri, data_path,
     data_digest = _digest_from_path(hashlib.sha256, data_path)
     inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
     inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
+    inj.block_size = _inject_block_size_default
     if meta_http_res_h:
         inj.meta_http_res_h = to_cache_response(meta_http_res_h)
     for (k, v) in kwargs.items():  # other stuff like metadata
@@ -423,6 +472,8 @@ def inject_uri(uri, data_path,
     if httpsig_priv_key:
         logger.debug("creating HTTP signature for URI: %s", inj.uri)
         inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
+        logger.debug("creating block signatures for URI: %s", inj.uri)
+        inj_data[BLOCK_SIGS_TAG] = block_signatures(inj, data_path, httpsig_priv_key)
 
     return (inj_data, data_digest)
 
@@ -622,6 +673,8 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     inj_dir = os.path.dirname(inj_prefix)
     os.makedirs(inj_prefix, exist_ok=True)
     for (itag, idata) in inj_data.items():
+        if idata is None:
+            continue
         with open('%s.%s' % (inj_prefix, itag), 'wb') as injf:
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)

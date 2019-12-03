@@ -12,7 +12,7 @@ For the moment only two injection mechanisms are supported:
   - BitTorrent BEP44 keys for signing insertions into Ouinet's BEP44
     distributed cache index.
   - Ed25519 keys for creating signatures of HTTP response heads according to
-    <https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11>.
+    <https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-12>.
 
 If you are running a Ouinet injector, you may use the ``ed25519-private-key``
 and ``ed25519-public-key`` files present in its repository directory.
