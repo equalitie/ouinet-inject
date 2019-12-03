@@ -386,7 +386,8 @@ def block_signatures(inj, data_path, httpsig_priv_key):
 
     Signatures are returned as bytes.  Each line in the result contains the
     hexadecimal offset of the block, a space character, the Base64-encoded
-    signature for the block, and a new line character.
+    signature for the block, a space character, the Base64-encoded chain hash
+    for the block, and a new line character.
 
     If the injection does not enable block signatures, return `None`.
 
@@ -410,9 +411,15 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     ...     bsigs = block_signatures(inj, data.name, sk)
     ...
     >>> bsigs_ref = b'''\
-    ... 0 AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==
-    ... 10000 c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==
-    ... 20000 m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==
+    ... 0\
+    ...  AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==\
+    ...  aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==
+    ... 10000\
+    ...  c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==\
+    ...  slwciqMQBddB71VWqpba+MpP9tBiyTE/XFmO5I1oiVJy3iFniKRkksbP78hCEWOM6tH31TGEFWP1loa4pqrLww==
+    ... 20000\
+    ...  m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==\
+    ...  vyUR6T034qN7qDZO5vUILMP9FsJYPys1KIELlGDFCSqSFI7ZowrT3U9ffwsQAZSCLJvKQhT+GhtO0aM2jNnm5A==
     ... '''
     >>> bsigs == bsigs_ref
     True
@@ -422,6 +429,7 @@ def block_signatures(inj, data_path, httpsig_priv_key):
         return None
 
     bsigs = io.BytesIO()
+    b64enc = base64.b64encode
     sig_str_pfx = b'%s\x00' % inj.id.encode()
     with open(data_path, 'rb') as dataf:
         block_offset = 0
@@ -433,7 +441,7 @@ def block_signatures(inj, data_path, httpsig_priv_key):
             block_hash.update(buf[:l])
             block_digest = block_hash.digest()
             bsig = httpsig_priv_key.sign(sig_str_pfx + block_digest).signature
-            bsigs.write(b'%x %s\n' % (block_offset, base64.b64encode(bsig)))
+            bsigs.write(b'%x %s %s\n' % (block_offset, b64enc(bsig), b64enc(block_digest)))
             block_offset += l
             l = dataf.readinto(buf)
 
