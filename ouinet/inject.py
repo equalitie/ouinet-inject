@@ -384,7 +384,9 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
 def block_signatures(inj, data_path, httpsig_priv_key):
     r"""Return block signatures for the given injection.
 
-    Signatures are returned as bytes.
+    Signatures are returned as bytes.  Each line in the result contains the
+    hexadecimal offset of the block, a space character, the Base64-encoded
+    signature for the block, and a new line character.
 
     If the injection does not enable block signatures, return `None`.
 
