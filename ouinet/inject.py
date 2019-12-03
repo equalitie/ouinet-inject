@@ -284,8 +284,14 @@ _hdr_pfx = 'X-Ouinet-'
 _hdr_version = _hdr_pfx + 'Version'
 _hdr_uri = _hdr_pfx + 'URI'
 _hdr_injection = _hdr_pfx + 'Injection'
+_hdr_bsigs = _hdr_pfx + 'BSigs'
 _hdr_data_size = _hdr_pfx + 'Data-Size'
 _hdr_sig0 = _hdr_pfx + 'Sig0'
+_http_bsigsfmt = (
+    'keyId="%s"'
+    ',algorithm="hs2019"'
+    ',size=%d'
+)
 
 def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     r"""Get an HTTP head for an injection using an Ed25519 private key.
@@ -361,13 +367,15 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     """
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
-    to_sign.add_header(_hdr_version, str(0))
+    to_sign.add_header(_hdr_version, str(3))
     to_sign.add_header(_hdr_uri, inj.uri)
     to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
-    to_sign.add_header(_hdr_data_size, str(inj.data_size))
-    to_sign.add_header('Digest', inj.data_digest)
     if not httpsig_key_id:
         httpsig_key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)
+    if getattr(inj, 'block_size', 0) > 0:
+        to_sign.add_header(_hdr_bsigs, _http_bsigsfmt % (httpsig_key_id, inj.block_size))
+    to_sign.add_header(_hdr_data_size, str(inj.data_size))
+    to_sign.add_header('Digest', inj.data_digest)
     signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
