@@ -298,10 +298,13 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     >>> from nacl.signing import SigningKey
     >>> from warcio.statusandheaders import StatusAndHeadersParser as parser
     >>>
-    >>> body = b'x' * 128 * 1024 + b'abcd'
+    >>> bs = 65536
+    >>> body = (b'0123' + b'x' * (bs - 8) + b'4567'
+    ...         + b'89AB' + b'x' * (bs - 8) + b'CDEF'
+    ...         + b'abcd')
     >>> b64_digest = b64enc(sha256(body).digest()).decode()
     >>> b64_digest
-    'PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs='
+    'E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE='
     >>>
     >>> head_s = b'''\
     ... HTTP/1.1 200 OK
@@ -322,6 +325,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ...     ts = ts
     ...     data_size = len(body)
     ...     data_digest = 'SHA-256=' + b64_digest
+    ...     block_size = bs
     ...     meta_http_res_h = head
     >>>
     >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
@@ -335,19 +339,21 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Content-Disposition: inline; filename="foo.html"
     ... Content-Length: 131076
     ... Server: Apache2
-    ... X-Ouinet-Version: 0
+    ... X-Ouinet-Version: 3
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+    ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... algorithm="hs2019",size=65536
     ... X-Ouinet-Data-Size: 131076
-    ... Digest: SHA-256=PcKmXT4Bi13pk1OsnR7dWA1bQxwsOQH2Ua+kvAtP3Zs=
+    ... Digest: SHA-256=E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE=
     ... X-Ouinet-Sig0: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
     ... algorithm="hs2019",created=1516048311,\
     ... headers="(response-status) (created) \
     ... date server content-type content-disposition \
-    ... x-ouinet-version x-ouinet-uri x-ouinet-injection \
+    ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs \
     ... x-ouinet-data-size \
     ... digest",\
-    ... signature="Yy3xLabSa2me5UpzwFVFqDYSXZbh5dGmKRxA6UqO8J+GEPnR9vEuc6yH0HvGK0THp6ZeuFpu69fYxpgSI45OBg=="
+    ... signature="h/PmOlFvScNzDAUvV7tLNjoA0A39OL67/9wbfrzqEY7j47IYVe1ipXuhhCfTnPeCyXBKiMlc4BP+nf0VmYzoAw=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed == signed_ref
