@@ -419,7 +419,23 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     if block_size <= 0:
         return None
 
-    return b''  # TODO
+    bsigs = io.BytesIO()
+    sig_str_pfx = b'%s\x00' % inj.id.encode()
+    with open(data_path, 'rb') as dataf:
+        block_offset = 0
+        block_digest = None
+        buf = bytearray(block_size)
+        l = dataf.readinto(buf)
+        while l:
+            block_hash = hashlib.sha512(block_digest or b'')
+            block_hash.update(buf[:l])
+            block_digest = block_hash.digest()
+            bsig = httpsig_priv_key.sign(sig_str_pfx + block_digest).signature
+            bsigs.write(b'%x %s\n' % (block_offset, base64.b64encode(bsig)))
+            block_offset += l
+            l = dataf.readinto(buf)
+
+    return bsigs.getvalue()
 
 def get_canonical_uri(uri):
     return uri  # TODO
