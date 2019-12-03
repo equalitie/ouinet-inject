@@ -5,7 +5,6 @@
 import argparse
 import base64
 import codecs
-import collections
 import glob
 import hashlib
 import io
@@ -26,6 +25,8 @@ import nacl.signing
 import warcio.archiveiterator
 import warcio.bufferedreaders as _warcbuf
 import warcio.statusandheaders as _warchead
+
+from ouinet.util.http_sign import signature as _http_signature
 
 
 OUINET_DIR_NAME = '.ouinet'
@@ -237,42 +238,6 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
         v=v
     ))
 
-_http_sigexclude = {
-    'content-length',
-    'transfer-encoding',
-    'trailer',
-}
-_http_sigfmt = (
-    'keyId="%s"'
-    ',algorithm="hs2019"'
-    ',created=%d'
-    ',headers="%s"'
-    ',signature="%s"'
-)
-
-def http_signature(res_h, priv_key, key_id, _ts=None):
-    ts = _ts if _ts else time.time()  # for testing
-
-    # Accumulate stripped values for repeated headers,
-    # while getting the list of headers in input order.
-    pseudo_headers = [('(response-status)', [res_h.get_statuscode()]),
-                      ('(created)', ['%d' % ts])]  # keeps order
-    header_values = collections.defaultdict(list, pseudo_headers)
-    headers = [hn for (hn, _) in pseudo_headers]
-    for (hn, hv) in res_h.headers:
-        (hn, hv) = (hn.lower(), hv.strip())
-        if hn in _http_sigexclude:
-            continue  # exclude framing headers
-        if hn not in header_values:
-            headers.append(hn)
-        header_values[hn].append(hv)
-
-    sig_string = '\n'.join('%s: %s' % (hn, ', '.join(header_values[hn]))
-                           for hn in headers).encode()  # only ASCII, RFC 7230#3.2.4
-    encoded_sig = base64.b64encode(priv_key.sign(sig_string).signature).decode()
-
-    return _http_sigfmt % (key_id, ts, ' '.join(headers), encoded_sig)
-
 def http_key_id_for_injection(httpsig_pub_key):
     # Extra check to avoid accidentally revealing a private key,
     # since both private and public keys have an ``encode`` method.
@@ -377,7 +342,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
         to_sign.add_header(_hdr_bsigs, _http_bsigsfmt % (httpsig_key_id, inj.block_size))
     to_sign.add_header(_hdr_data_size, str(inj.data_size))
     to_sign.add_header('Digest', inj.data_digest)
-    signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
+    signature = _http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
