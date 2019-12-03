@@ -225,7 +225,7 @@ def bep44_insert(index_key, desc_link, desc_inline, priv_key):
 
     # Sign, build exported message fields and encode the result.
     # We follow the names used in the BEP44 document.
-    sig = priv_key.sign(sigbuf)[:-len(sigbuf)]  # remove trailing signed message
+    sig = priv_key.sign(sigbuf).signature
     return bencoder.bencode(dict(
         # cas is not compulsory
         # id depends on the publishing node
@@ -269,7 +269,7 @@ def http_signature(res_h, priv_key, key_id, _ts=None):
 
     sig_string = '\n'.join('%s: %s' % (hn, ', '.join(header_values[hn]))
                            for hn in headers).encode()  # only ASCII, RFC 7230#3.2.4
-    encoded_sig = base64.b64encode(priv_key.sign(sig_string)[:-len(sig_string)]).decode()
+    encoded_sig = base64.b64encode(priv_key.sign(sig_string).signature).decode()
 
     return _http_sigfmt % (key_id, ts, ' '.join(headers), encoded_sig)
 
