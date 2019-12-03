@@ -36,6 +36,7 @@ HTTP_RES_H_FILE_EXT = '.http-res-h'
 DESC_TAG = 'desc'
 INS_TAG_PFX = 'ins-'
 HTTP_SIG_TAG = 'http-res-h'
+BLOCK_SIGS_TAG = 'bsigs'
 
 DATA_DIR_NAME = 'ouinet-data'
 
@@ -380,11 +381,26 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
+def block_signatures(inj, httpsig_priv_key):
+    """Return block signatures for the given injection.
+
+    Signatures are returned as bytes.
+
+    If the injection does not enable block signatures, return `None`.
+    """
+    block_size = getattr(inj, 'block_size', 0)
+    if block_size <= 0:
+        return None
+
+    return b''  # TODO
+
 def get_canonical_uri(uri):
     return uri  # TODO
 
 class Injection:
     pass  # just a dummy container
+
+_inject_block_size_default = 65536  # bytes
 
 def inject_uri(uri, data_path,
                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None,
@@ -406,6 +422,7 @@ def inject_uri(uri, data_path,
     data_digest = _digest_from_path(hashlib.sha256, data_path)
     inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
     inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
+    inj.block_size = _inject_block_size_default
     if meta_http_res_h:
         inj.meta_http_res_h = to_cache_response(meta_http_res_h)
     for (k, v) in kwargs.items():  # other stuff like metadata
@@ -437,6 +454,8 @@ def inject_uri(uri, data_path,
     if httpsig_priv_key:
         logger.debug("creating HTTP signature for URI: %s", inj.uri)
         inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
+        logger.debug("creating block signatures for URI: %s", inj.uri)
+        inj_data[BLOCK_SIGS_TAG] = block_signatures(inj, httpsig_priv_key)
 
     return (inj_data, data_digest)
 
@@ -636,6 +655,8 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     inj_dir = os.path.dirname(inj_prefix)
     os.makedirs(inj_prefix, exist_ok=True)
     for (itag, idata) in inj_data.items():
+        if idata is None:
+            continue
         with open('%s.%s' % (inj_prefix, itag), 'wb') as injf:
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
