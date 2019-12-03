@@ -381,12 +381,39 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
-def block_signatures(inj, httpsig_priv_key):
+def block_signatures(inj, data_path, httpsig_priv_key):
     """Return block signatures for the given injection.
 
     Signatures are returned as bytes.
 
     If the injection does not enable block signatures, return `None`.
+
+    >>> from tempfile import NamedTemporaryFile as mktemp
+    >>> from base64 import b64decode as b64dec
+    >>> from nacl.signing import SigningKey
+    >>>
+    >>> bs = 65536
+    >>> body = (b'0123' + b'x' * (bs - 8) + b'4567'
+    ...         + b'89AB' + b'x' * (bs - 8) + b'CDEF'
+    ...         + b'abcd')
+    >>>
+    >>> class inj:
+    ...     id = 'd6076384-2295-462b-a047-fe2c9274e58d'
+    ...     block_size = bs
+    >>>
+    >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
+    >>> with mktemp() as data:
+    ...     _ = data.write(body)
+    ...     _ = data.seek(0)
+    ...     bsigs = block_signatures(inj, data.name, sk)
+    ...
+    >>> bsigs_ref = b'''\
+    ... 0 AwiYuUjLYh/jZz9d0/ev6dpoWqjU/sUWUmGL36/D9tI30oaqFgQGgcbVCyBtl0a7x4saCmxRHC4JW7cYEPWwCw==
+    ... 10000 c+ZJUJI/kc81q8sLMhwe813Zdc+VPa4DejdVkO5ZhdIPPojbZnRt8OMyFMEiQtHYHXrZIK2+pKj2AO03j70TBA==
+    ... 20000 m6sz1NpU/8iF6KNN6drY+Yk361GiW0lfa0aaX5TH0GGW/L5GsHyg8ozA0ejm29a+aTjp/qIoI1VrEVj1XG/gDA==
+    ... '''
+    >>> bsigs == bsigs_ref
+    True
     """
     block_size = getattr(inj, 'block_size', 0)
     if block_size <= 0:
@@ -455,7 +482,7 @@ def inject_uri(uri, data_path,
         logger.debug("creating HTTP signature for URI: %s", inj.uri)
         inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
         logger.debug("creating block signatures for URI: %s", inj.uri)
-        inj_data[BLOCK_SIGS_TAG] = block_signatures(inj, httpsig_priv_key)
+        inj_data[BLOCK_SIGS_TAG] = block_signatures(inj, data_path, httpsig_priv_key)
 
     return (inj_data, data_digest)
 
