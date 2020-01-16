@@ -54,6 +54,11 @@ the lower-case, hexadecimal SHA1 hash of the URI:
     contains the IPFS CID hash to content data (in the `%s` directory)
 
   - `<XY>/<REST>.ins-<INDEX>`: insertion data for the URI on the given INDEX
+
+  - `<XY>/<REST>.http-res-h`: the signed head of the HTTP GET response
+
+  - `<XY>/<REST>.bsigs`: signature and hash of each data block: block offset
+    (hex), block signature (Base64), chained hash (Base64)
 """ % DATA_DIR_NAME
 
 DATA_DIR_INFO = """\
