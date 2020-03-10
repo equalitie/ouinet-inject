@@ -372,8 +372,10 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
         httpsig_key_id = http_key_id_for_injection(httpsig_priv_key.verify_key)
     if getattr(inj, 'block_size', 0) > 0:
         to_sign.add_header(_hdr_bsigs, _http_bsigsfmt % (httpsig_key_id, inj.block_size))
-    to_sign.add_header(_hdr_data_size, str(inj.data_size))
-    to_sign.add_header('Digest', inj.data_digest)
+    if hasattr(inj, 'data_size'):
+        to_sign.add_header(_hdr_data_size, str(inj.data_size))
+    if hasattr(inj, 'data_digest'):
+        to_sign.add_header('Digest', inj.data_digest)
     signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
