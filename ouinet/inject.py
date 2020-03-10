@@ -338,7 +338,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     """
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
-    to_sign.add_header(_hdr_version, str(3))
+    to_sign.add_header(_hdr_version, str(4))
     to_sign.add_header(_hdr_uri, inj.uri)
     to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
     if not httpsig_key_id:
@@ -400,7 +400,7 @@ def block_signatures(inj, data_path, httpsig_priv_key):
 
     bsigs = io.BytesIO()
     b64enc = base64.b64encode
-    sig_str_pfx = b'%s\x00' % inj.id.encode()
+    sig_str_fmt = b'%s\x00%%d\x00%%s' % inj.id.encode()
     with open(data_path, 'rb') as dataf:
         block_offset = 0
         block_digest = None
@@ -410,7 +410,7 @@ def block_signatures(inj, data_path, httpsig_priv_key):
             block_hash = hashlib.sha512(block_digest or b'')
             block_hash.update(buf[:l])
             block_digest = block_hash.digest()
-            bsig = httpsig_priv_key.sign(sig_str_pfx + block_digest).signature
+            bsig = httpsig_priv_key.sign(sig_str_fmt % (block_offset, block_digest)).signature
             bsigs.write(b'%x %s %s\n' % (block_offset, b64enc(bsig), b64enc(block_digest)))
             block_offset += l
             l = dataf.readinto(buf)
