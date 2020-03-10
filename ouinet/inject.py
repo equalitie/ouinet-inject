@@ -295,20 +295,46 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... '''.replace(b'\n', b'\r\n')
     >>> head = parser(['HTTP/1.0', 'HTTP/1.1']).parse(io.BytesIO(head_s))
     >>>
+    >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
     >>> ts = 1516048310
-    >>> class inj:
+    >>> class inj_incomplete:
     ...     uri = 'https://example.com/foo'
     ...     id = 'd6076384-2295-462b-a047-fe2c9274e58d'
     ...     ts = ts
-    ...     data_size = len(body)
-    ...     data_digest = 'SHA-256=' + b64_digest
     ...     block_size = bs
     ...     meta_http_res_h = head
     >>>
-    >>> sk = SigningKey(b64dec(b'MfWAV5YllPAPeMuLXwN2mUkV9YaSSJVUcj/2YOaFmwQ='))
-    >>> signed = http_inject(inj, sk, _ts=(ts + 1))
+    >>> ts_incomplete = ts
+    >>> signed_ref_incomplete = b'''\
+    ... HTTP/1.1 200 OK
+    ... Date: Mon, 15 Jan 2018 20:31:50 GMT
+    ... Server: Apache1
+    ... Content-Type: text/html
+    ... Content-Disposition: inline; filename="foo.html"
+    ... Content-Length: 131076
+    ... Server: Apache2
+    ... X-Ouinet-Version: 4
+    ... X-Ouinet-URI: https://example.com/foo
+    ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
+    ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... algorithm="hs2019",size=65536
+    ... X-Ouinet-Sig0: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
+    ... algorithm="hs2019",created=1516048310,\
+    ... headers="(response-status) (created) \
+    ... date server content-type content-disposition \
+    ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs",\
+    ... signature="UvcvmTPLGnmG3Bk2xdIBZ2Mw5V6enCXqyS3jReRev/o7ZvtKrSujnyHUEpHQ3pM+axfjw1vAznE4+mhMXTVdAg=="
+    ...
+    ... '''.replace(b'\n', b'\r\n')
+    >>> signed_incomplete = http_inject(inj_incomplete, sk, _ts=ts_incomplete)
+    >>> signed_incomplete == signed_ref_incomplete
+    True
+    >>> ts_complete = ts + 1
+    >>> class inj_complete(inj_incomplete):
+    ...     data_size = len(body)
+    ...     data_digest = 'SHA-256=' + b64_digest
     >>>
-    >>> signed_ref = b'''\
+    >>> signed_ref_complete = b'''\
     ... HTTP/1.1 200 OK
     ... Date: Mon, 15 Jan 2018 20:31:50 GMT
     ... Server: Apache1
@@ -333,7 +359,8 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... signature="nDUm3W0OCeygFTdVoH/6mEKt9S7xIL/EESCEFKNGxJy5zepJQjW38p3QUqycvZuc058vEuRa/CRLDdhc/KW7Ag=="
     ...
     ... '''.replace(b'\n', b'\r\n')
-    >>> signed == signed_ref
+    >>> signed_complete = http_inject(inj_complete, sk, _ts=ts_complete)
+    >>> signed_complete == signed_ref_complete
     True
     """
     res = inj.meta_http_res_h
