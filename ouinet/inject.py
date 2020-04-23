@@ -437,7 +437,7 @@ def block_signatures(inj, data_path, httpsig_priv_key):
         l = dataf.readinto(buf)
         while l:
             block_hash = hashlib.sha512(block_digest or b'')
-            block_hash.update(buf[:l])
+            block_hash.update(hashlib.sha512(buf[:l]).digest())
             block_digest = block_hash.digest()
             bsig = httpsig_priv_key.sign(sig_str_fmt % (block_offset, block_digest)).signature
             bsigs.write(b'%x %s %s\n' % (block_offset, b64enc(bsig), b64enc(block_digest)))
