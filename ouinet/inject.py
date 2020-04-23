@@ -365,7 +365,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     """
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
-    to_sign.add_header(_hdr_version, str(4))
+    to_sign.add_header(_hdr_version, str(5))
     to_sign.add_header(_hdr_uri, inj.uri)
     to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
     if not httpsig_key_id:
