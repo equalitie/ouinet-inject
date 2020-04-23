@@ -385,8 +385,9 @@ def block_signatures(inj, data_path, httpsig_priv_key):
 
     Signatures are returned as bytes.  Each line in the result contains the
     hexadecimal offset of the block, a space character, the Base64-encoded
-    signature for the block, a space character, the Base64-encoded chain hash
-    for the block, and a new line character.
+    signature for the block, a space character, the Base64-encoded data hash
+    for the block, a space character, the Base64-encoded chain hash for the
+    block, and a new line character.
 
     If the injection does not enable block signatures, return `None`.
 
@@ -412,12 +413,15 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     >>> bsigs_ref = b'''\
     ... 0\
     ...  r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==\
+    ...  aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\
     ...  4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==
     ... 10000\
     ...  JZlln7qCNUpkc+VAzUy1ty8HwTIb9lrWXDGX9EgsNWzpHTs+Fxgfabqx7eClphZXNVNKgn75LirH9pxo1ZnoAg==\
+    ...  lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==\
     ...  bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==
     ... 20000\
     ...  mN5ckFgTf+dDj0gpG4/6pPTPEGklaywsLY0rK4o+nKtLFUG9l0pUecMQcxQu/TPHnCJOGzcU++rcqxI4bjrfBg==\
+    ...  2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==\
     ...  xU5ll5e/S4nn3T7iGoP5N30QQ5QfPh4YGFCQASn5pATjb4U+qLhqBpkeQnuUk/I3oC0JSHIYmVHH16quqh9bXA==
     ... '''
     >>> bsigs == bsigs_ref
