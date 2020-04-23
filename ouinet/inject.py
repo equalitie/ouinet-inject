@@ -313,7 +313,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Content-Disposition: inline; filename="foo.html"
     ... Content-Length: 131076
     ... Server: Apache2
-    ... X-Ouinet-Version: 4
+    ... X-Ouinet-Version: 5
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
@@ -323,7 +323,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... headers="(response-status) (created) \
     ... date server content-type content-disposition \
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs",\
-    ... signature="UvcvmTPLGnmG3Bk2xdIBZ2Mw5V6enCXqyS3jReRev/o7ZvtKrSujnyHUEpHQ3pM+axfjw1vAznE4+mhMXTVdAg=="
+    ... signature="qs/iL8KDytc22DqSBwhkEf/RoguMcQKcorrwviQx9Ck0SBf0A4Hby+dMpHDk9mjNYYnLCw4G9vPN637hG3lkAQ=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed_incomplete = http_inject(inj_incomplete, sk, _ts=ts_incomplete)
@@ -342,7 +342,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Content-Disposition: inline; filename="foo.html"
     ... Content-Length: 131076
     ... Server: Apache2
-    ... X-Ouinet-Version: 4
+    ... X-Ouinet-Version: 5
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
@@ -356,7 +356,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs \
     ... x-ouinet-data-size \
     ... digest",\
-    ... signature="nDUm3W0OCeygFTdVoH/6mEKt9S7xIL/EESCEFKNGxJy5zepJQjW38p3QUqycvZuc058vEuRa/CRLDdhc/KW7Ag=="
+    ... signature="4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed_complete = http_inject(inj_complete, sk, _ts=ts_complete)
