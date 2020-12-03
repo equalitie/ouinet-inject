@@ -426,6 +426,18 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     ... '''
     >>> bsigs == bsigs_ref
     True
+    >>>
+    >>> with mktemp() as data:
+    ...     bsigs = block_signatures(inj, data.name, sk)
+    ...
+    >>> bsigs_ref = b'''\
+    ... 0\
+    ...  sI1HJC2+BeXy39qqaivr9IrUB8B8dlUm8J3WrYlrH0HmdnfA5DlwIrd00sph3OSrJGw/ATzNbUI3xdTS2kccBQ==\
+    ...  z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==\
+    ...  gm3waEV99d0ZW0N6t+dzn/ddJnIYPwK7jhCJ+rz5e9ncgBEM9C28fP9Bx47LaNi6eKvmtReN6jmE34xVVBv5SQ==
+    ... '''
+    >>> bsigs == bsigs_ref
+    True
     """
     block_size = getattr(inj, 'block_size', 0)
     if block_size <= 0:
@@ -439,7 +451,9 @@ def block_signatures(inj, data_path, httpsig_priv_key):
         block_chain_digest = None
         buf = bytearray(block_size)
         l = dataf.readinto(buf)
-        while l:
+        first_read = True  # for empty data
+        while first_read or l:
+            first_read = False
             block_chain_hash = hashlib.sha512(block_chain_digest or b'')
             block_data_digest = hashlib.sha512(buf[:l]).digest()
             block_chain_hash.update(block_data_digest)
