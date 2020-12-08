@@ -313,7 +313,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Content-Disposition: inline; filename="foo.html"
     ... Content-Length: 131076
     ... Server: Apache2
-    ... X-Ouinet-Version: 5
+    ... X-Ouinet-Version: 6
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
@@ -323,7 +323,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... headers="(response-status) (created) \
     ... date server content-type content-disposition \
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs",\
-    ... signature="qs/iL8KDytc22DqSBwhkEf/RoguMcQKcorrwviQx9Ck0SBf0A4Hby+dMpHDk9mjNYYnLCw4G9vPN637hG3lkAQ=="
+    ... signature="OhUfbxd63iV8UnoSoGBLY6cGVbsR+FB20gJk67rvxHx9CjvQzvIHjsKtmayrF6gmh2VIlZH07rT5Bpc+1lMsBg=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed_incomplete = http_inject(inj_incomplete, sk, _ts=ts_incomplete)
@@ -342,7 +342,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... Content-Disposition: inline; filename="foo.html"
     ... Content-Length: 131076
     ... Server: Apache2
-    ... X-Ouinet-Version: 5
+    ... X-Ouinet-Version: 6
     ... X-Ouinet-URI: https://example.com/foo
     ... X-Ouinet-Injection: id=d6076384-2295-462b-a047-fe2c9274e58d,ts=1516048310
     ... X-Ouinet-BSigs: keyId="ed25519=DlBwx8WbSsZP7eni20bf5VKUH3t1XAF/+hlDoLbZzuw=",\
@@ -356,7 +356,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     ... x-ouinet-version x-ouinet-uri x-ouinet-injection x-ouinet-bsigs \
     ... x-ouinet-data-size \
     ... digest",\
-    ... signature="4+POBKdNljxUKHKD+NCP34aS6j0QhI4EWmqiN3aopoWtDiMwgmeiR1hO44QhWFwWdNmNkVJs+LVuEUN892mFDg=="
+    ... signature="TL2i9D1a9b5X3p2qVOjanENO7FpltN9qUmTG0hTg9SMIrC7O5SRjzqsh/qg2TGUrf5hchaxhrWGRKUAJ3iPoDg=="
     ...
     ... '''.replace(b'\n', b'\r\n')
     >>> signed_complete = http_inject(inj_complete, sk, _ts=ts_complete)
@@ -365,7 +365,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     """
     res = inj.meta_http_res_h
     to_sign = _warchead.StatusAndHeaders(res.statusline, res.headers.copy(), res.protocol)
-    to_sign.add_header(_hdr_version, str(5))
+    to_sign.add_header(_hdr_version, str(6))
     to_sign.add_header(_hdr_uri, inj.uri)
     to_sign.add_header(_hdr_injection, 'id=%s,ts=%d' % (inj.id, inj.ts))
     if not httpsig_key_id:
@@ -416,13 +416,13 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     ...  aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\
     ...  4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==
     ... 10000\
-    ...  JZlln7qCNUpkc+VAzUy1ty8HwTIb9lrWXDGX9EgsNWzpHTs+Fxgfabqx7eClphZXNVNKgn75LirH9pxo1ZnoAg==\
+    ...  LfRN72Vv5QMNd6sn6HOWbfcoN6DA9kdjTXEfJvmgViZQZT5hlZXQpCOULyBreeZv3sd7j5FJzgu3CCUoBXOCCA==\
     ...  lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==\
-    ...  bmsnk/0dfFU9MnSe7RwGfZruUjmhffJYMXviAt2oSDBMMJOrwFsJFkCoIkdsKXej59QR8jLUuPAF7y3Y0apiTQ==
+    ...  ELwO/upgGHUv+GGm8uFMqQPtpLpNHUtSsLPuGo7lflgLZGA8GVfrFF1yuNOx1U998iF2rAApn8Yua80Fnn+TKg==
     ... 20000\
-    ...  mN5ckFgTf+dDj0gpG4/6pPTPEGklaywsLY0rK4o+nKtLFUG9l0pUecMQcxQu/TPHnCJOGzcU++rcqxI4bjrfBg==\
+    ...  oZ3hLELDPOK4y2b0Yd6ezoXaF37PqBXt/WX7YJAzfS4au/QewCQxMlds8qtNWjOrP9Gzyde3jjFn647srWI7DA==\
     ...  2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==\
-    ...  xU5ll5e/S4nn3T7iGoP5N30QQ5QfPh4YGFCQASn5pATjb4U+qLhqBpkeQnuUk/I3oC0JSHIYmVHH16quqh9bXA==
+    ...  zBvQ0lnfde2B6dRt2B0HvW/kaiL1TXNlbezQmhNqh0zCxMBHb0SWPsWeKNDbsHFdyKzZlauqzVSfAsHer0fq+w==
     ... '''
     >>> bsigs == bsigs_ref
     True
@@ -448,13 +448,16 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     sig_str_fmt = b'%s\x00%%d\x00%%s' % inj.id.encode()
     with open(data_path, 'rb') as dataf:
         block_offset = 0
+        bsig = None
         block_chain_digest = None
         buf = bytearray(block_size)
         l = dataf.readinto(buf)
         first_read = True  # for empty data
         while first_read or l:
             first_read = False
-            block_chain_hash = hashlib.sha512(block_chain_digest or b'')
+            block_chain_hash = hashlib.sha512()
+            block_chain_hash.update(bsig or b'')
+            block_chain_hash.update(block_chain_digest or b'')
             block_data_digest = hashlib.sha512(buf[:l]).digest()
             block_chain_hash.update(block_data_digest)
             block_chain_digest = block_chain_hash.digest()
