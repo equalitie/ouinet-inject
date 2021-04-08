@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import logging
+import mimetypes
 import os
 import subprocess
 import uuid
@@ -725,6 +726,20 @@ def inject_static_root(root_dir, repo_dir, base_uri,
         for fn in filenames:
             fp = os.path.join(dirpath, fn)
             uri = dir_uri_prefix + quote(fn)
+
+            headers = []
+            (mtype, menc) = mimetypes.guess_type(fn)
+            if mtype:
+                headers.append(('Content-Type', mtype))
+            else:
+                logger.warning("failed to guess MIME type for content file: %s",
+                               os.path.relpath(fp, root_dir))
+            if menc:
+                headers.append(('Content-Encoding', menc))
+            mtime = time.gmtime(os.stat(fp).st_mtime)
+            headers.append(('Last-Modified', time.strftime('%a, %d %b %Y %H:%M:%S GMT', mtime)))
+            head = _warchead.StatusAndHeaders('200 OK', headers, 'HTTP/1.1')
+
             pass  # TODO
     raise NotImplementedError  # TODO
 
