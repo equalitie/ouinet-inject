@@ -731,7 +731,7 @@ def inject_static_root(root_dir, repo_dir, base_uri,
             (mtype, menc) = mimetypes.guess_type(fn)
             if mtype:
                 headers.append(('Content-Type', mtype))
-            else:
+            else:  # do not add header, see RFC7231#3.1.1.5
                 logger.warning("failed to guess MIME type for content file: %s",
                                os.path.relpath(fp, root_dir))
             if menc:
