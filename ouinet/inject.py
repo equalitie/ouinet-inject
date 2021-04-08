@@ -13,10 +13,12 @@ import logging
 import os
 import subprocess
 import uuid
+import re
 import shutil
 import sys
 import tempfile
 import time
+import urllib.parse
 import zlib
 
 import bencoder
@@ -704,6 +706,26 @@ def inject_warc(warc_file, output_dir,
 
 def inject_static_root(root_dir, repo_dir, base_uri,
                        httpsig_priv_key, httpsig_key_id):
+    """TODO: document
+    """
+    root_dir = os.path.realpath(root_dir)
+    repo_dir = os.path.realpath(repo_dir)
+    if root_dir == repo_dir:
+        raise ValueError("static cache root and repository cannot match")
+
+    base_uri = re.sub(r'(/*)$', '', base_uri)
+    quote = urllib.parse.quote
+
+    for (dirpath, dirnames, filenames) in os.walk(root_dir):
+        if dirpath == repo_dir:   # i.e. repo under root dir
+            continue
+        # E.g. with `http://foo.bar/' and `/path/to/root`,
+        # `/path/to/root/blah/blah` -> `http://foo.bar/blah/blah/`.
+        dir_uri_prefix = '%s%s/' % (base_uri, quote(dirpath[len(root_dir):].replace(os.path.sep, '/')))
+        for fn in filenames:
+            fp = os.path.join(dirpath, fn)
+            uri = dir_uri_prefix + quote(fn)
+            pass  # TODO
     raise NotImplementedError  # TODO
 
 def save_uri_injection(uri, data_path, output_dir, **kwargs):
