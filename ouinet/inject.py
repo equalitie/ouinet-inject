@@ -702,6 +702,10 @@ def inject_warc(warc_file, output_dir,
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
+def inject_static_root(root_dir, repo_dir, base_uri,
+                       httpsig_priv_key, httpsig_key_id):
+    raise NotImplementedError  # TODO
+
 def save_uri_injection(uri, data_path, output_dir, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
 
@@ -778,9 +782,15 @@ def main():
                   os.path.sep
               )))
     parser.add_argument(
+        '--content-base-uri', metavar="URI", default='',
+        help=("a base URI to synthesize HTTP response headers "
+              "for content files in the INPUT_DIR static cache root; "
+              "OUTPUT_DIR will become a static cache repository for it"
+              ))
+    parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
         'input', metavar="INPUT_DIR|INPUT_WARC", type=os.path.normpath,
-        help=("the directory where HTTP exchanges are read from, "
+        help=("the directory where static cache content or HTTP exchanges are read from, "
               "or a WARC file containing such exchanges"))
     parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
@@ -799,15 +809,19 @@ def main():
         logger.info("HTTP signatures public key: %s", sk2pkhex(httpsig_sk))
         httpsig_kid = http_key_id_for_injection(httpsig_sk.verify_key)
 
-    if os.path.isdir(args.input):
-        inject_dir(input_dir=args.input, output_dir=args.output_directory,
-                   bep44_priv_key=bep44_sk,
-                   httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
-    else:
+    if not os.path.isdir(args.input):
         with open(args.input, 'rb') as warcf:
             inject_warc(warcf, args.output_directory,
                         bep44_priv_key=bep44_sk,
                         httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
+    elif not args.content_base_uri:
+        inject_dir(input_dir=args.input, output_dir=args.output_directory,
+                   bep44_priv_key=bep44_sk,
+                   httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
+    else:
+        inject_static_root(root_dir=args.input, repo_dir=args.output_directory,
+                           base_uri=args.content_base_uri,
+                           httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s',
