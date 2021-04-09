@@ -737,6 +737,9 @@ def inject_static_root(root_dir, repo_dir, base_uri,
     See `save_static_injection()` for more information on
     the storage of injections in `repo_dir`.
     """
+    if not httpsig_priv_key or not httpsig_key_id:
+        raise ValueError("missing private key for HTTP signatures")
+
     root_dir = os.path.realpath(root_dir)
     repo_dir = os.path.realpath(repo_dir)
     if root_dir == repo_dir:
