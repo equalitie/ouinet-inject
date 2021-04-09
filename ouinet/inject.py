@@ -42,6 +42,17 @@ INS_TAG_PFX = 'ins-'
 HTTP_SIG_TAG = 'http-res-h'
 BLOCK_SIGS_TAG = 'bsigs'
 
+REPO_DATA_DIR_NAME = 'data-v3'
+REPO_DATA_HEAD_NAME = 'head'
+REPO_DATA_SIGS_NAME = 'sigs'
+REPO_DATA_BODY_NAME = 'body'
+REPO_DATA_BODY_PATH_NAME = 'body-path'
+
+_repo_data_name_from_tag = {
+    HTTP_SIG_TAG: REPO_DATA_HEAD_NAME,
+    BLOCK_SIGS_TAG: REPO_DATA_SIGS_NAME,
+}
+
 DATA_DIR_NAME = 'ouinet-data'
 
 OUINET_DIR_INFO = """\
@@ -92,11 +103,11 @@ def _maybe_add_readme(readme_dir, text):
     with open(readme_path, 'w') as f:
         f.write(text)
 
-def inj_prefix_from_uri_hash(uri_hash, output_dir):
+def inj_prefix_from_uri_hash(uri_hash, output_dir, inj_dir=OUINET_DIR_NAME):
     # The splitting mimics that of Git object storage:
     # we use the initial two digits since
     # with SHA1 all bytes vary more or less uniformly.
-    return os.path.join(output_dir, OUINET_DIR_NAME, uri_hash[:2], uri_hash[2:])
+    return os.path.join(output_dir, inj_dir, uri_hash[:2], uri_hash[2:])
 
 def data_path_from_data_digest(data_digest, output_dir):
     """Return the output path for a file with the given `data_digest`.
@@ -808,7 +819,41 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
         os.link(data_path, out_data_path)
 
 def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
-    print("XXXX INJECT", uri, data_path, kwargs)  # TODO
+    """TODO: document
+    """
+    # _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
+
+    uri_hash = hashlib.sha1(uri.encode()).hexdigest()
+    inj_prefix = inj_prefix_from_uri_hash(uri_hash, repo_dir, REPO_DATA_DIR_NAME)
+    os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
+
+    # After all the previous checks, proceed to the real injection.
+    (inj_data, _) = inject_uri(uri, data_path, **kwargs)
+
+    # Write descriptor and insertion data to the output directory.
+    # TODO: handle exceptions
+    for (itag, idata) in inj_data.items():
+        if idata is None:
+            continue
+        with open(os.path.join(inj_prefix, _repo_data_name_from_tag[itag]), 'wb') as injf:
+            # TODO: fix block signatures format
+            logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
+            injf.write(idata)
+
+    # Remove embedded body if present.
+    bodyp = os.path.join(inj_prefix, REPO_DATA_BODY_NAME)
+    if os.path.exists(bodyp):
+        logger.warning("removing existing body in injection data: uri_hash=%s", uri_hash)
+        os.remove(bodyp)
+
+    # Refer to the content file.
+    body_path = (os.path.relpath(data_path, root_dir)
+                 .replace(os.path.sep, '/')
+                 .encode())
+    bodypp = os.path.join(inj_prefix, REPO_DATA_BODY_PATH_NAME)
+    with open(bodypp, 'wb') as bodypf:
+        logger.debug("writing content file body reference: uri_hash=%s", uri_hash)
+        bodypf.write(body_path)
 
 def _private_key_from_arg(priv_key):
     """Return the Ed25519 private key in command-line argument `priv_key`.
