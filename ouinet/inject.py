@@ -705,6 +705,9 @@ def inject_warc(warc_file, output_dir,
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
+def _http_time_from_posix(ts):
+    return time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(ts))
+
 def inject_static_root(root_dir, repo_dir, base_uri,
                        httpsig_priv_key, httpsig_key_id):
     """TODO: document
@@ -736,8 +739,8 @@ def inject_static_root(root_dir, repo_dir, base_uri,
                                os.path.relpath(fp, root_dir))
             if menc:
                 headers.append(('Content-Encoding', menc))
-            mtime = time.gmtime(os.stat(fp).st_mtime)
-            headers.append(('Last-Modified', time.strftime('%a, %d %b %Y %H:%M:%S GMT', mtime)))
+            mtime = os.stat(fp).st_mtime
+            headers.append(('Last-Modified', _http_time_from_posix(mtime)))
             head = _warchead.StatusAndHeaders('200 OK', headers, 'HTTP/1.1')
 
             pass  # TODO
