@@ -744,9 +744,10 @@ def inject_static_root(root_dir, repo_dir, base_uri,
             fp = os.path.join(dirpath, fn)
             uri = dir_uri_prefix + quote(fn)
             head = _http_head_from_content_file(fp, root_dir)
-
-            pass  # TODO
-    raise NotImplementedError  # TODO
+            save_static_injection(uri, fp, root_dir, repo_dir,
+                                  httpsig_priv_key=httpsig_priv_key,
+                                  httpsig_key_id=httpsig_key_id,
+                                  meta_http_res_h=head)
 
 def save_uri_injection(uri, data_path, output_dir, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
@@ -791,6 +792,9 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
         os.makedirs(out_data_dir, exist_ok=True)
         logger.debug("linking data file: uri_hash=%s", uri_hash)
         os.link(data_path, out_data_path)
+
+def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
+    print("XXXX INJECT", uri, data_path, kwargs)  # TODO
 
 def _private_key_from_arg(priv_key):
     """Return the Ed25519 private key in command-line argument `priv_key`.
