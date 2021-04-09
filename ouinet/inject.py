@@ -745,6 +745,9 @@ def inject_static_root(root_dir, repo_dir, base_uri,
     create HTTP signatures.
     `httpsig_key_id` is an identifier for that key in signatures.
 
+    A separate resource group is created for each inserted file,
+    with the associated URI as the group's name.
+
     See `save_static_injection()` for more information on
     the storage of injections in `repo_dir`.
     """
@@ -773,6 +776,7 @@ def inject_static_root(root_dir, repo_dir, base_uri,
                                   httpsig_priv_key=httpsig_priv_key,
                                   httpsig_key_id=httpsig_key_id,
                                   meta_http_res_h=head)
+            # TODO: create resource group with just the URI
 
 def save_uri_injection(uri, data_path, output_dir, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
