@@ -50,7 +50,6 @@ REPO_DATA_BODY_PATH_NAME = 'body-path'
 
 _repo_data_name_from_tag = {
     HTTP_SIG_TAG: REPO_DATA_HEAD_NAME,
-    BLOCK_SIGS_TAG: REPO_DATA_SIGS_NAME,
 }
 
 DATA_DIR_NAME = 'ouinet-data'
@@ -394,6 +393,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
+# TODO: return sequence of tuples, or an iterator
 def block_signatures(inj, data_path, httpsig_priv_key):
     r"""Return block signatures for the given injection.
 
@@ -818,6 +818,16 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
         logger.debug("linking data file: uri_hash=%s", uri_hash)
         os.link(data_path, out_data_path)
 
+_data_v3_no_previous_chash = base64.b64encode(bytes(64))
+_data_v3_sigs_line_format = b'%016x %s %s %s\n'
+
+def _store_v3_block_sigs(block_sigs, sigsf):
+    prev_chash = _data_v3_no_previous_chash
+    for sigsl in block_sigs.splitlines():
+        (offset, sig, dhash, chash) = sigsl.split()
+        sigsf.write(_data_v3_sigs_line_format % (int(offset, 16), sig, dhash, prev_chash))
+        prev_chash = chash
+
 def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     """TODO: document
     """
@@ -833,12 +843,17 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
     for (itag, idata) in inj_data.items():
+        if itag == BLOCK_SIGS_TAG:
+            continue  # handled separatedly
         if idata is None:
             continue
         with open(os.path.join(inj_prefix, _repo_data_name_from_tag[itag]), 'wb') as injf:
-            # TODO: fix block signatures format
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
+    # Signed HTTP storage v3 uses a slightly different format of block signatures, convert.
+    block_sigs = inj_data[BLOCK_SIGS_TAG]
+    with open(os.path.join(inj_prefix, REPO_DATA_SIGS_NAME), 'wb') as sigsf:
+        _store_v3_block_sigs(block_sigs, sigsf)
 
     # Remove embedded body if present.
     bodyp = os.path.join(inj_prefix, REPO_DATA_BODY_NAME)
