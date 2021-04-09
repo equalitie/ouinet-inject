@@ -499,7 +499,8 @@ def inject_uri(uri, data_path,
     inj.data_size = os.path.getsize(data_path)
     data_digest = _digest_from_path(hashlib.sha256, data_path)
     inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
-    inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
+    if bep44_priv_key:
+        inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
     inj.block_size = _inject_block_size_default
     if meta_http_res_h:
         inj.meta_http_res_h = to_cache_response(meta_http_res_h)
@@ -508,22 +509,22 @@ def inject_uri(uri, data_path,
 
     inj_data = {}
 
-    # Generate the descriptor.
-    logger.debug("creating descriptor for URI: %s", inj.uri)
-    desc = descriptor_from_injection(inj)
-
-    # Serialize the descriptor for index insertion.
-    desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
-    ipfs_add = subprocess.run(['ipfs', 'add', '-qn'],
-                              input=desc_data,
-                              stdout=subprocess.PIPE, check=True)
-    desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
-    desc_inline = b'/zlib/' + zlib.compress(desc_data)
-    inj_data[DESC_TAG] = desc_data
-
-    # Prepare insertion of the descriptor into indexes.
-    index_key = index_key_from_http_url(inj.uri)
     if bep44_priv_key:
+        # Generate the descriptor.
+        logger.debug("creating descriptor for URI: %s", inj.uri)
+        desc = descriptor_from_injection(inj)
+
+        # Serialize the descriptor for index insertion.
+        desc_data = json.dumps(desc, separators=(',', ':')).encode('utf-8')  # RFC 8259#8.1
+        ipfs_add = subprocess.run(['ipfs', 'add', '-qn'],
+                                  input=desc_data,
+                                  stdout=subprocess.PIPE, check=True)
+        desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
+        desc_inline = b'/zlib/' + zlib.compress(desc_data)
+        inj_data[DESC_TAG] = desc_data
+
+        # Prepare insertion of the descriptor into indexes.
+        index_key = index_key_from_http_url(inj.uri)
         logger.debug("creating BEP44 insertion data for URI: %s", inj.uri)
         inj_data[INS_TAG_PFX + 'bep44'] = bep44_insert(
             index_key, desc_link, desc_inline, bep44_priv_key)
