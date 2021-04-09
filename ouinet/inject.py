@@ -708,6 +708,20 @@ def inject_warc(warc_file, output_dir,
 def _http_time_from_posix(ts):
     return time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(ts))
 
+def _http_head_from_content_file(fpath, root_dir):
+    headers = []
+    (mtype, menc) = mimetypes.guess_type(fpath)
+    if mtype:
+        headers.append(('Content-Type', mtype))
+    else:  # do not add header, see RFC7231#3.1.1.5
+        logger.warning("failed to guess MIME type for content file: %s",
+                       os.path.relpath(fpath, root_dir))
+    if menc:
+        headers.append(('Content-Encoding', menc))
+    mtime = os.stat(fpath).st_mtime
+    headers.append(('Last-Modified', _http_time_from_posix(mtime)))
+    return _warchead.StatusAndHeaders('200 OK', headers, 'HTTP/1.1')
+
 def inject_static_root(root_dir, repo_dir, base_uri,
                        httpsig_priv_key, httpsig_key_id):
     """TODO: document
@@ -729,19 +743,7 @@ def inject_static_root(root_dir, repo_dir, base_uri,
         for fn in filenames:
             fp = os.path.join(dirpath, fn)
             uri = dir_uri_prefix + quote(fn)
-
-            headers = []
-            (mtype, menc) = mimetypes.guess_type(fn)
-            if mtype:
-                headers.append(('Content-Type', mtype))
-            else:  # do not add header, see RFC7231#3.1.1.5
-                logger.warning("failed to guess MIME type for content file: %s",
-                               os.path.relpath(fp, root_dir))
-            if menc:
-                headers.append(('Content-Encoding', menc))
-            mtime = os.stat(fp).st_mtime
-            headers.append(('Last-Modified', _http_time_from_posix(mtime)))
-            head = _warchead.StatusAndHeaders('200 OK', headers, 'HTTP/1.1')
+            head = _http_head_from_content_file(fp, root_dir)
 
             pass  # TODO
     raise NotImplementedError  # TODO
