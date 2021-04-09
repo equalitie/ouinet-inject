@@ -763,7 +763,7 @@ def inject_static_root(root_dir, repo_dir, base_uri,
         if dirpath == repo_dir:   # i.e. repo under root dir
             continue
         # E.g. with `http://foo.bar/' and `/path/to/root`,
-        # `/path/to/root/blah/blah` -> `http://foo.bar/blah/blah/`.
+        # `/path/to/root/blah/blàh` -> `http://foo.bar/blah/bl%C3%A0h/`.
         dir_uri_prefix = '%s%s/' % (base_uri, quote(dirpath[len(root_dir):].replace(os.path.sep, '/')))
         for fn in filenames:
             fp = os.path.join(dirpath, fn)
@@ -849,7 +849,7 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     # Refer to the content file.
     body_path = (os.path.relpath(data_path, root_dir)
                  .replace(os.path.sep, '/')
-                 .encode())
+                 .encode('utf-8'))
     bodypp = os.path.join(inj_prefix, REPO_DATA_BODY_PATH_NAME)
     with open(bodypp, 'wb') as bodypf:
         logger.debug("writing content file body reference: uri_hash=%s", uri_hash)
