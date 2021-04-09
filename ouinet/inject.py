@@ -724,7 +724,17 @@ def _http_head_from_content_file(fpath, root_dir):
 
 def inject_static_root(root_dir, repo_dir, base_uri,
                        httpsig_priv_key, httpsig_key_id):
-    """TODO: document
+    """Sign content from `root_dir`, put insertion data in static cache `repo_dir`.
+
+    A URI and HTTP head will be synthesized for each file under the `root_dir`,
+    with the URI having `base_uri` as a prefix and the ``path/to/file`` as a suffix.
+
+    `httpsig_priv_key` is the Ed25519 private key to be used to
+    create HTTP signatures.
+    `httpsig_key_id` is an identifier for that key in signatures.
+
+    See `save_static_injection()` for more information on
+    the storage of injections in `repo_dir`.
     """
     root_dir = os.path.realpath(root_dir)
     repo_dir = os.path.realpath(repo_dir)
