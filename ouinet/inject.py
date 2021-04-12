@@ -48,13 +48,11 @@ REPO_DATA_SIGS_NAME = 'sigs'
 REPO_DATA_BODY_NAME = 'body'
 REPO_DATA_BODY_PATH_NAME = 'body-path'
 
-REPO_GROUPS_DIR_NAME = 'dht_groups'
-REPO_GROUPS_GROUP_NAME = 'group_name'
-REPO_GROUPS_ITEMS_NAME = 'items'
-
 _repo_data_name_from_tag = {
     HTTP_SIG_TAG: REPO_DATA_HEAD_NAME,
 }
+
+REPO_GROUPS_DIR_NAME = 'dht_groups'
 
 DATA_DIR_NAME = 'ouinet-data'
 
@@ -752,16 +750,21 @@ def group_shortened_uri(uri):
     return _shortened_uri_tail_rx.sub('', uri)
 
 def group_add_uri(repo_dir, group, uri):
-    """TODO: document
+    """Add the given `uri` (string) to the resource `group` (bytes).
+
+    The group is created if it does not exist yet.
+
+    The groups are stored into the `REPO_GROUPS_DIR_NAME` directory under `repo_dir`;
+    the former is also created if missing.
     """
     # _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
 
     group_hash = hashlib.sha1(group).hexdigest()
     group_prefix = os.path.join(repo_dir, REPO_GROUPS_DIR_NAME, group_hash)
-    items_prefix = os.path.join(group_prefix, REPO_GROUPS_ITEMS_NAME)
+    items_prefix = os.path.join(group_prefix, 'items')
     os.makedirs(items_prefix, exist_ok=True)  # items are added
 
-    gnamep = os.path.join(group_prefix, REPO_GROUPS_GROUP_NAME)
+    gnamep = os.path.join(group_prefix, 'group_name')
     if not os.path.exists(gnamep):
         with open(gnamep, 'wb') as gnamef:
             logger.debug("creating resource group %r", group)
