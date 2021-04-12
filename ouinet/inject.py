@@ -734,7 +734,20 @@ def _http_head_from_content_file(fpath, root_dir):
     headers.append(('Last-Modified', _http_time_from_posix(mtime)))
     return _warchead.StatusAndHeaders('200 OK', headers, 'HTTP/1.1')
 
-def inject_static_root(root_dir, repo_dir, base_uri,
+_shortened_uri_head_rx = re.compile(r'^[a-z][-+.0-9a-z]*://(?:www\.)?(.*)$')
+_shortened_uri_tail_rx = re.compile(r'(/+)$')
+
+def group_shortened_uri(uri):
+    """Shorten `uri` by removing the scheme, leading ``www.`` and trailing slashes.
+
+    >>> group_shortened_uri('https://www.example.com/foo/bar/')
+    'example.com/foo/bar'
+    """
+    uri = uri.split('#', 1)[0]  # drop fragment, just in case
+    uri = _shortened_uri_head_rx.sub(r'\1', uri)
+    return _shortened_uri_tail_rx.sub('', uri)
+
+def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
                        httpsig_priv_key, httpsig_key_id):
     """Sign content from `root_dir`, put insertion data in static cache `repo_dir`.
 
@@ -747,6 +760,8 @@ def inject_static_root(root_dir, repo_dir, base_uri,
 
     A separate resource group is created for each inserted file,
     with the associated URI as the group's name.
+    If `use_short_group` is true, the group's name is shortened by
+    removing the scheme, leading ``www.`` and trailing slashes from the URI.
 
     See `save_static_injection()` for more information on
     the storage of injections in `repo_dir`.
@@ -778,6 +793,8 @@ def inject_static_root(root_dir, repo_dir, base_uri,
                                   httpsig_priv_key=httpsig_priv_key,
                                   httpsig_key_id=httpsig_key_id,
                                   meta_http_res_h=head)
+
+            group = group_shortened_uri(uri) if use_short_group else uri
             # TODO: create resource group with just the URI
 
 def save_uri_injection(uri, data_path, output_dir, **kwargs):
@@ -914,6 +931,11 @@ def main():
               "OUTPUT_DIR will become a static cache repository for it"
               ))
     parser.add_argument(
+        '--use-short-group', default=False, action=argparse.BooleanOptionalAction,
+        help=("remove scheme, leading \"www.\" and trailing slashes from the resource URI "
+              "when computing its associated resource group"
+              ))
+    parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
         'input', metavar="INPUT_DIR|INPUT_WARC", type=os.path.normpath,
         help=("the directory where static cache content or HTTP exchanges are read from, "
@@ -946,7 +968,7 @@ def main():
                    httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     else:
         inject_static_root(root_dir=args.input, repo_dir=args.output_directory,
-                           base_uri=args.content_base_uri,
+                           base_uri=args.content_base_uri, use_short_group=args.use_short_group,
                            httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
 if __name__ == '__main__':
