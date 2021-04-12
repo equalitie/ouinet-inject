@@ -43,15 +43,6 @@ HTTP_SIG_TAG = 'http-res-h'
 BLOCK_SIGS_TAG = 'bsigs'
 
 REPO_DATA_DIR_NAME = 'data-v3'
-REPO_DATA_HEAD_NAME = 'head'
-REPO_DATA_SIGS_NAME = 'sigs'
-REPO_DATA_BODY_NAME = 'body'
-REPO_DATA_BODY_PATH_NAME = 'body-path'
-
-_repo_data_name_from_tag = {
-    HTTP_SIG_TAG: REPO_DATA_HEAD_NAME,
-}
-
 REPO_GROUPS_DIR_NAME = 'dht_groups'
 
 DATA_DIR_NAME = 'ouinet-data'
@@ -881,8 +872,20 @@ def _store_v3_block_sigs(block_sigs, sigsf):
         sigsf.write(_data_v3_sigs_line_format % (int(offset, 16), sig, dhash, prev_chash))
         prev_chash = chash
 
+_repo_data_name_from_tag = {
+    HTTP_SIG_TAG: 'head',
+}
+
 def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
-    """TODO: document
+    """Inject the `uri` and save insertion data into the static cache `repo_dir`.
+
+    Existing insertion data for the `uri` is overwritten
+    (dropping body data for the `uri` if embedded in the repository).
+    Insertion data will refer to the file with the `data_path`,
+    which must be under the given static cache `root_dir`.
+
+    The injections are stored into the `REPO_DATA_DIR_NAME` directory under `repo_dir`;
+    the former is also created if missing.
     """
     # _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
 
@@ -905,11 +908,11 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
             injf.write(idata)
     # Signed HTTP storage v3 uses a slightly different format of block signatures, convert.
     block_sigs = inj_data[BLOCK_SIGS_TAG]
-    with open(os.path.join(inj_prefix, REPO_DATA_SIGS_NAME), 'wb') as sigsf:
+    with open(os.path.join(inj_prefix, 'sigs'), 'wb') as sigsf:
         _store_v3_block_sigs(block_sigs, sigsf)
 
     # Remove embedded body if present.
-    bodyp = os.path.join(inj_prefix, REPO_DATA_BODY_NAME)
+    bodyp = os.path.join(inj_prefix, 'body')
     if os.path.exists(bodyp):
         logger.warning("removing existing body in injection data: uri_hash=%s", uri_hash)
         os.remove(bodyp)
@@ -918,7 +921,7 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     body_path = (os.path.relpath(data_path, root_dir)
                  .replace(os.path.sep, '/')
                  .encode('utf-8'))
-    bodypp = os.path.join(inj_prefix, REPO_DATA_BODY_PATH_NAME)
+    bodypp = os.path.join(inj_prefix, 'body-path')
     with open(bodypp, 'wb') as bodypf:
         logger.debug("writing content file body reference: uri_hash=%s", uri_hash)
         bodypf.write(body_path)
