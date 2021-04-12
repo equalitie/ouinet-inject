@@ -48,6 +48,10 @@ REPO_DATA_SIGS_NAME = 'sigs'
 REPO_DATA_BODY_NAME = 'body'
 REPO_DATA_BODY_PATH_NAME = 'body-path'
 
+REPO_GROUPS_DIR_NAME = 'dht_groups'
+REPO_GROUPS_GROUP_NAME = 'group_name'
+REPO_GROUPS_ITEMS_NAME = 'items'
+
 _repo_data_name_from_tag = {
     HTTP_SIG_TAG: REPO_DATA_HEAD_NAME,
 }
@@ -747,6 +751,29 @@ def group_shortened_uri(uri):
     uri = _shortened_uri_head_rx.sub(r'\1', uri)
     return _shortened_uri_tail_rx.sub('', uri)
 
+def group_add_uri(repo_dir, group, uri):
+    """TODO: document
+    """
+    # _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
+
+    group_hash = hashlib.sha1(group).hexdigest()
+    group_prefix = os.path.join(repo_dir, REPO_GROUPS_DIR_NAME, group_hash)
+    items_prefix = os.path.join(group_prefix, REPO_GROUPS_ITEMS_NAME)
+    os.makedirs(items_prefix, exist_ok=True)  # items are added
+
+    gnamep = os.path.join(group_prefix, REPO_GROUPS_GROUP_NAME)
+    if not os.path.exists(gnamep):
+        with open(gnamep, 'wb') as gnamef:
+            logger.debug("creating resource group %r", group)
+            gnamef.write(group)
+
+    uri_bs = uri.encode('ascii')
+    uri_hash = hashlib.sha1(uri_bs).hexdigest()
+    inamep = os.path.join(items_prefix, uri_hash)
+    with open(inamep, 'wb') as inamef:
+        logger.debug("adding item %s to group %r", uri, group)
+        inamef.write(uri_bs)
+
 def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
                        httpsig_priv_key, httpsig_key_id):
     """Sign content from `root_dir`, put insertion data in static cache `repo_dir`.
@@ -794,8 +821,8 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
                                   httpsig_key_id=httpsig_key_id,
                                   meta_http_res_h=head)
 
-            group = group_shortened_uri(uri) if use_short_group else uri
-            # TODO: create resource group with just the URI
+            group = (group_shortened_uri(uri) if use_short_group else uri).encode('ascii')
+            group_add_uri(repo_dir, group, uri)
 
 def save_uri_injection(uri, data_path, output_dir, **kwargs):
     """Inject the `uri` and save insertion data to `output_dir`.
