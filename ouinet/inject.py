@@ -83,6 +83,40 @@ To get the hexadecimal hash from the Base64 one used by descriptors in the
 
 """ % OUINET_DIR_NAME
 
+REPO_DIR_INFO = """\
+This directory is a Ouinet static cache repository.  It contains metadata and
+signatures of cached Web resources to allow you to share them with others by
+using Ouinet clients.
+
+This directory will usually be right under, or othewise accompanied by,
+another directory containing plain files with the actual content associated
+with these Web resources.  That directory is called the static cache root (or
+the content directory).
+
+There are two subdirectories under this repository:
+
+  - The data directory `%s`.
+
+    This contains, for the HTTP response associated with a URL, a directory
+    `<XY>/<REST>`, where `<XY><REST>` is the lower-case, hexadecimal SHA1 hash
+    of the URL.  The directory contains files with the signed HTTP response
+    head, signatures of response body blocks, and either body data or the path
+    of the file containing that data relative to the static cache root.
+
+  - The resource groups directory `%s`.
+
+    This contains one directory per group announced to other Ouinet clients
+    over the network, named as the lower-case, hexadecimal SHA1 hash of the
+    group name found in its `group_name` file.  The directory also includes an
+    `items` subdirectory with one file per URL belonging to the group,
+    containing the URL itself, and named as the lower-case, hexadecimal SHA1
+    hash of the URL.
+
+    The group name depends on the application; it may for instance be derived
+    from the URL of a Web page, with its images, styles, scripts etc. being
+    its items.
+""" % (REPO_DATA_DIR_NAME, REPO_GROUPS_DIR_NAME)
+
 logger = logging.getLogger(__name__)
 
 
@@ -748,8 +782,6 @@ def group_add_uri(repo_dir, group, uri):
     The groups are stored into the `REPO_GROUPS_DIR_NAME` directory under `repo_dir`;
     the former is also created if missing.
     """
-    # _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
-
     group_hash = hashlib.sha1(group).hexdigest()
     group_prefix = os.path.join(repo_dir, REPO_GROUPS_DIR_NAME, group_hash)
     items_prefix = os.path.join(group_prefix, 'items')
@@ -784,8 +816,8 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
     If `use_short_group` is true, the group's name is shortened by
     removing the scheme, leading ``www.`` and trailing slashes from the URI.
 
-    See `save_static_injection()` for more information on
-    the storage of injections in `repo_dir`.
+    See `REPO_DIR_INFO` for more information on
+    the storage of injections and resource groups in `repo_dir`.
     """
     if not httpsig_priv_key or not httpsig_key_id:
         raise ValueError("missing private key for HTTP signatures")
@@ -799,6 +831,8 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
     # As per RFC3986#2.2, the only reserved characters which
     # may alter the interpretation of the URI are ``?`` and ``#``.
     quote = lambda s: urllib.parse.quote(s, safe=':/[]@!$&\'()*+,;=')
+
+    _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
 
     for (dirpath, dirnames, filenames) in os.walk(root_dir):
         if dirpath == repo_dir:   # i.e. repo under root dir
@@ -887,8 +921,6 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     The injections are stored into the `REPO_DATA_DIR_NAME` directory under `repo_dir`;
     the former is also created if missing.
     """
-    # _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
-
     uri_hash = hashlib.sha1(uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, repo_dir, REPO_DATA_DIR_NAME)
     os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
