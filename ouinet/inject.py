@@ -760,7 +760,9 @@ def inject_static_root(root_dir, repo_dir, base_uri,
         raise ValueError("static cache root and repository cannot match")
 
     base_uri = re.sub(r'(/*)$', '', base_uri)
-    quote = urllib.parse.quote
+    # As per RFC3986#2.2, the only reserved characters which
+    # may alter the interpretation of the URI are ``?`` and ``#``.
+    quote = lambda s: urllib.parse.quote(s, safe=':/[]@!$&\'()*+,;=')
 
     for (dirpath, dirnames, filenames) in os.walk(root_dir):
         if dirpath == repo_dir:   # i.e. repo under root dir
