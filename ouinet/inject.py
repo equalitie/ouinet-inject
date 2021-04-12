@@ -832,7 +832,7 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
     # may alter the interpretation of the URI are ``?`` and ``#``.
     quote = lambda s: urllib.parse.quote(s, safe=':/[]@!$&\'()*+,;=')
 
-    _maybe_add_readme(repo_dir, REPO_DIR_INFO)  # TODO
+    _maybe_add_readme(repo_dir, REPO_DIR_INFO)
 
     for (dirpath, dirnames, filenames) in os.walk(root_dir):
         if dirpath == repo_dir:   # i.e. repo under root dir
