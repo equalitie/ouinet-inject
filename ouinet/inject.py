@@ -422,15 +422,14 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
 
 # TODO: return sequence of tuples, or an iterator
 def block_signatures(inj, data_path, httpsig_priv_key):
-    r"""Return block signatures for the given injection.
+    r"""Iterate over block signatures for the given injection.
 
-    Signatures are returned as bytes.  Each line in the result contains the
-    hexadecimal offset of the block, a space character, the Base64-encoded
-    signature for the block, a space character, the Base64-encoded data hash
-    for the block, a space character, the Base64-encoded chain hash for the
-    block, and a new line character.
+    This generator yields signatures as tuples.  Each tuple contains
+    the offset of the block, the signature for the block,
+    the data hash for the block, and the chain hash for the block.
+    Signatures and hashes are Base64-encoded in bytes objects.
 
-    If the injection does not enable block signatures, return `None`.
+    If the injection does not enable block signatures, nothing is yielded.
 
     >>> from tempfile import NamedTemporaryFile as mktemp
     >>> from base64 import b64decode as b64dec
@@ -449,42 +448,41 @@ def block_signatures(inj, data_path, httpsig_priv_key):
     >>> with mktemp() as data:
     ...     _ = data.write(body)
     ...     _ = data.seek(0)
-    ...     bsigs = block_signatures(inj, data.name, sk)
+    ...     bsigs = list(block_signatures(inj, data.name, sk))
     ...
-    >>> bsigs_ref = b'''\
-    ... 0\
-    ...  r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==\
-    ...  aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==\
-    ...  4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg==
-    ... 10000\
-    ...  LfRN72Vv5QMNd6sn6HOWbfcoN6DA9kdjTXEfJvmgViZQZT5hlZXQpCOULyBreeZv3sd7j5FJzgu3CCUoBXOCCA==\
-    ...  lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==\
-    ...  ELwO/upgGHUv+GGm8uFMqQPtpLpNHUtSsLPuGo7lflgLZGA8GVfrFF1yuNOx1U998iF2rAApn8Yua80Fnn+TKg==
-    ... 20000\
-    ...  oZ3hLELDPOK4y2b0Yd6ezoXaF37PqBXt/WX7YJAzfS4au/QewCQxMlds8qtNWjOrP9Gzyde3jjFn647srWI7DA==\
-    ...  2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==\
-    ...  zBvQ0lnfde2B6dRt2B0HvW/kaiL1TXNlbezQmhNqh0zCxMBHb0SWPsWeKNDbsHFdyKzZlauqzVSfAsHer0fq+w==
-    ... '''
+    >>> bsigs_ref = [
+    ... (0,
+    ...  b'r2OtBbBVBXT2b8Ch/eFfQt1eDoG8eMs/JQxnjzNPquF80WcUNwQQktsu0mF0+bwc3akKdYdBDeORNLhRjrxVBA==',
+    ...  b'aERfr5o+kpvR4ZH7xC0mBJ4QjqPUELDzjmzt14WmntxH2p3EQmATZODXMPoFiXaZL6KNI50Ve4WJf/x3ma4ieA==',
+    ...  b'4c0RNY1zc7KD7WqcgnEnGv2BJPLDLZ8ie8/kxtwBLoN2LJNnzUMFzXZoYy1NnddokpIxEm3dL+gJ7dr0xViVOg=='),
+    ... (0x10000,
+    ...  b'LfRN72Vv5QMNd6sn6HOWbfcoN6DA9kdjTXEfJvmgViZQZT5hlZXQpCOULyBreeZv3sd7j5FJzgu3CCUoBXOCCA==',
+    ...  b'lfLy+XIYvDfWbg0+hDnfPZ2G548iBKNalciKnSzEDPLiqmxRng2oOAcpKwY5NicofgpuYrMGII2JwOS7XFPJNA==',
+    ...  b'ELwO/upgGHUv+GGm8uFMqQPtpLpNHUtSsLPuGo7lflgLZGA8GVfrFF1yuNOx1U998iF2rAApn8Yua80Fnn+TKg=='),
+    ... (0x20000,
+    ...  b'oZ3hLELDPOK4y2b0Yd6ezoXaF37PqBXt/WX7YJAzfS4au/QewCQxMlds8qtNWjOrP9Gzyde3jjFn647srWI7DA==',
+    ...  b'2AIvIGCtbv0perc9zFNVybIUBUsNF3ahNqZp0mp9OxT3OqDQ6/8Z7jMzaPAWS2QZqW2knj5IF1Pn6Wtxa9zLbw==',
+    ...  b'zBvQ0lnfde2B6dRt2B0HvW/kaiL1TXNlbezQmhNqh0zCxMBHb0SWPsWeKNDbsHFdyKzZlauqzVSfAsHer0fq+w=='),
+    ... ]
     >>> bsigs == bsigs_ref
     True
     >>>
     >>> with mktemp() as data:
-    ...     bsigs = block_signatures(inj, data.name, sk)
+    ...     bsigs = list(block_signatures(inj, data.name, sk))
     ...
-    >>> bsigs_ref = b'''\
-    ... 0\
-    ...  sI1HJC2+BeXy39qqaivr9IrUB8B8dlUm8J3WrYlrH0HmdnfA5DlwIrd00sph3OSrJGw/ATzNbUI3xdTS2kccBQ==\
-    ...  z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==\
-    ...  gm3waEV99d0ZW0N6t+dzn/ddJnIYPwK7jhCJ+rz5e9ncgBEM9C28fP9Bx47LaNi6eKvmtReN6jmE34xVVBv5SQ==
-    ... '''
+    >>> bsigs_ref = [
+    ... (0,
+    ...  b'sI1HJC2+BeXy39qqaivr9IrUB8B8dlUm8J3WrYlrH0HmdnfA5DlwIrd00sph3OSrJGw/ATzNbUI3xdTS2kccBQ==',
+    ...  b'z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==',
+    ...  b'gm3waEV99d0ZW0N6t+dzn/ddJnIYPwK7jhCJ+rz5e9ncgBEM9C28fP9Bx47LaNi6eKvmtReN6jmE34xVVBv5SQ=='),
+    ... ]
     >>> bsigs == bsigs_ref
     True
     """
     block_size = getattr(inj, 'block_size', 0)
     if block_size <= 0:
-        return None
+        return
 
-    bsigs = io.BytesIO()
     b64enc = base64.b64encode
     sig_str_fmt = b'%s\x00%%d\x00%%s' % inj.id.encode()
     with open(data_path, 'rb') as dataf:
@@ -503,12 +501,9 @@ def block_signatures(inj, data_path, httpsig_priv_key):
             block_chain_hash.update(block_data_digest)
             block_chain_digest = block_chain_hash.digest()
             bsig = httpsig_priv_key.sign(sig_str_fmt % (block_offset, block_chain_digest)).signature
-            bsigs.write(b'%x %s %s %s\n' % (block_offset, b64enc(bsig),
-                                            b64enc(block_data_digest), b64enc(block_chain_digest)))
+            yield (block_offset, b64enc(bsig), b64enc(block_data_digest), b64enc(block_chain_digest))
             block_offset += l
             l = dataf.readinto(buf)
-
-    return bsigs.getvalue()
 
 def get_canonical_uri(uri):
     return uri  # TODO
@@ -880,11 +875,20 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     inj_dir = os.path.dirname(inj_prefix)
     os.makedirs(inj_prefix, exist_ok=True)
     for (itag, idata) in inj_data.items():
+        if itag == BLOCK_SIGS_TAG:
+            continue  # handled separatedly
         if idata is None:
             continue
         with open('%s.%s' % (inj_prefix, itag), 'wb') as injf:
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
+    # Save block signatures.
+    block_sigs = inj_data.get(BLOCK_SIGS_TAG)
+    if block_sigs:
+        with open('%s.%s' % (inj_prefix, BLOCK_SIGS_TAG), 'wb') as sigsf:
+            sigs_line_format = b'%x %s %s %s\n'
+            for sigs in block_sigs:
+                sigsf.write(sigs_line_format % sigs)
 
     # Hard-link the data file (if not already there).
     # TODO: look for better options
@@ -901,9 +905,8 @@ _data_v3_sigs_line_format = b'%016x %s %s %s\n'
 
 def _store_v3_block_sigs(block_sigs, sigsf):
     prev_chash = _data_v3_no_previous_chash
-    for sigsl in block_sigs.splitlines():
-        (offset, sig, dhash, chash) = sigsl.split()
-        sigsf.write(_data_v3_sigs_line_format % (int(offset, 16), sig, dhash, prev_chash))
+    for (offset, sig, dhash, chash) in block_sigs:
+        sigsf.write(_data_v3_sigs_line_format % (offset, sig, dhash, prev_chash))
         prev_chash = chash
 
 _repo_data_name_from_tag = {
@@ -938,7 +941,7 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
         with open(os.path.join(inj_prefix, _repo_data_name_from_tag[itag]), 'wb') as injf:
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
-    # Signed HTTP storage v3 uses a slightly different format of block signatures, convert.
+    # Save block signatures in signed HTTP storage v3 format.
     block_sigs = inj_data[BLOCK_SIGS_TAG]
     with open(os.path.join(inj_prefix, 'sigs'), 'wb') as sigsf:
         _store_v3_block_sigs(block_sigs, sigsf)
