@@ -135,6 +135,12 @@ def inj_prefix_from_uri_hash(uri_hash, output_dir, inj_dir=OUINET_DIR_NAME):
     # with SHA1 all bytes vary more or less uniformly.
     return os.path.join(output_dir, inj_dir, uri_hash[:2], uri_hash[2:])
 
+def data_suffix_from_data_digest(data_digest):
+    # Use an hexadecimal hash since it is case-insensitive,
+    # so we avoid collisions on platforms like Windows.
+    hex_digest = codecs.encode(data_digest, 'hex').decode()
+    return os.path.join(hex_digest[:2], hex_digest[2:])
+
 def data_path_from_data_digest(data_digest, output_dir):
     """Return the output path for a file with the given `data_digest`.
 
@@ -145,11 +151,8 @@ def data_path_from_data_digest(data_digest, output_dir):
     ['.', 'ouinet-data', 'e3', 'b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']
     """
     # The hash above is for an empty (zero-length) file.
-    #
-    # Use an hexadecimal hash since it is case-insensitive,
-    # so we avoid collisions on platforms like Windows.
-    hex_digest = codecs.encode(data_digest, 'hex').decode()
-    return os.path.join(output_dir, DATA_DIR_NAME, hex_digest[:2], hex_digest[2:])
+    suffix = data_suffix_from_data_digest(data_digest)
+    return os.path.join(output_dir, DATA_DIR_NAME, suffix)
 
 # From Ouinet's ``src/http_util.h:to_cache_response()``.
 # The order and format of the headers is respected in the output.
@@ -666,8 +669,16 @@ def inject_dir(input_dir, output_dir,
                                  meta_http_res_h=http_headers)
                 save_uri_injection(inj, datap, output_dir)
 
-def inject_warc(warc_file, output_dir,
-                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
+def inject_warc(warc_file, output_dir, use_short_group,
+                httpsig_priv_key, httpsig_key_id):
+    if not httpsig_priv_key or not httpsig_key_id:
+        raise ValueError("missing private key for HTTP signatures")
+
+    root_dir = os.path.realpath(output_dir)
+    repo_dir = os.path.join(root_dir, OUINET_DIR_NAME)
+
+    _maybe_add_readme(repo_dir, REPO_DIR_INFO)
+
     # For marking GET requests pointed to by responses.
     seen_get_req = set()
     # For marking responses pointed to by GET requests.
@@ -725,19 +736,32 @@ def inject_warc(warc_file, output_dir,
 
         # Extract body data to a temporary file in the output directory,
         # so that it can be safely hard-linked into the data directory.
-        os.makedirs(output_dir, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=output_dir, delete=True) as dataf:
+        data_dir = os.path.join(root_dir, DATA_DIR_NAME)
+        os.makedirs(data_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=data_dir, delete=True) as tmp_dataf:
             bodyf = io.BytesIO(body)
-            shutil.copyfileobj(bodyf, dataf)
-            dataf.flush()
+            shutil.copyfileobj(bodyf, tmp_dataf)
+            tmp_dataf.flush()
 
-            datap = os.path.join(output_dir, dataf.name)
-            inj = inject_uri(uri, datap,
-                             bep44_priv_key=bep44_priv_key,
+            tmp_datap = os.path.join(data_dir, tmp_dataf.name)
+            inj = inject_uri(uri, tmp_datap,
                              httpsig_priv_key=httpsig_priv_key,
                              httpsig_key_id=httpsig_key_id,
                              meta_http_res_h=http_res_h)
-            save_uri_injection(inj, datap, output_dir)
+
+            # Hard-link the data file (if not already there).
+            # TODO: look for better options
+            # TODO: handle exceptions
+            datap = os.path.join(data_dir, data_suffix_from_data_digest(inj.data_sha256_digest))
+            if not os.path.exists(datap):
+                os.makedirs(os.path.dirname(datap), exist_ok=True)
+                logger.debug("linking data file: uri=%s", inj.uri)
+                os.link(tmp_datap, datap)
+
+            save_static_injection(inj, datap, root_dir, repo_dir)
+
+            group = (group_shortened_uri(inj.uri) if use_short_group else inj.uri).encode('ascii')
+            group_add_uri(repo_dir, group, inj.uri)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
@@ -1026,8 +1050,7 @@ def main():
 
     if not os.path.isdir(args.input):
         with open(args.input, 'rb') as warcf:
-            inject_warc(warcf, args.output_directory,
-                        bep44_priv_key=bep44_sk,
+            inject_warc(warcf, args.output_directory, use_short_group=args.use_short_group,
                         httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     elif not args.content_base_uri:
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
