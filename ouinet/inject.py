@@ -856,7 +856,7 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
     _maybe_add_readme(repo_dir, REPO_DIR_INFO)
 
     for (dirpath, dirnames, filenames) in os.walk(root_dir):
-        if dirpath == repo_dir:   # i.e. repo under root dir
+        if os.path.commonpath([dirpath, repo_dir]) == repo_dir:   # i.e. repo under root dir
             continue
         # E.g. with `http://foo.bar/' and `/path/to/root`,
         # `/path/to/root/blah/blàh` -> `http://foo.bar/blah/bl%C3%A0h/`.
