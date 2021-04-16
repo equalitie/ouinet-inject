@@ -821,11 +821,11 @@ def group_add_uri(repo_dir, group, uri):
         logger.debug("adding item %s to group %r", uri, group)
         inamef.write(uri_bs)
 
-def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
+def inject_static_root(input_dir, output_dir, base_uri, use_short_group,
                        httpsig_priv_key, httpsig_key_id):
-    """Sign content from `root_dir`, put insertion data in static cache `repo_dir`.
+    """Sign content from `input_dir`, put insertion data under `output_dir`.
 
-    A URI and HTTP head will be synthesized for each file under the `root_dir`,
+    A URI and HTTP head will be synthesized for each file under the static cache root `input_dir`,
     with the URI having `base_uri` as a prefix and the ``path/to/file`` as a suffix.
 
     `httpsig_priv_key` is the Ed25519 private key to be used to
@@ -838,15 +838,13 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
     removing the scheme, leading ``www.`` and trailing slashes from the URI.
 
     See `REPO_DIR_INFO` for more information on
-    the storage of injections and resource groups in `repo_dir`.
+    the storage of injections and resource groups in the static cache repository under `output_dir`.
     """
     if not httpsig_priv_key or not httpsig_key_id:
         raise ValueError("missing private key for HTTP signatures")
 
-    root_dir = os.path.realpath(root_dir)
-    repo_dir = os.path.realpath(repo_dir)
-    if root_dir == repo_dir:
-        raise ValueError("static cache root and repository cannot match")
+    root_dir = os.path.realpath(input_dir)
+    repo_dir = os.path.join(os.path.realpath(output_dir), OUINET_DIR_NAME)
 
     base_uri = re.sub(r'(/*)$', '', base_uri)
     # As per RFC3986#2.2, the only reserved characters which
@@ -1018,8 +1016,7 @@ def main():
     parser.add_argument(
         '--content-base-uri', metavar="URI", default='',
         help=("a base URI to synthesize HTTP response headers "
-              "for content files in the INPUT_DIR static cache root; "
-              "OUTPUT_DIR will become a static cache repository for it"
+              "for content files in the INPUT_DIR static cache root"
               ))
     parser.add_argument(
         '--use-short-group', default=False, action=argparse.BooleanOptionalAction,
@@ -1057,7 +1054,7 @@ def main():
                    bep44_priv_key=bep44_sk,
                    httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     else:
-        inject_static_root(root_dir=args.input, repo_dir=args.output_directory,
+        inject_static_root(input_dir=args.input, output_dir=args.output_directory,
                            base_uri=args.content_base_uri, use_short_group=args.use_short_group,
                            httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
