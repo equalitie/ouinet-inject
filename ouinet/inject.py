@@ -857,17 +857,16 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
     the format of output files in these directories.
     """
+    inj = inject_uri(uri, data_path, **kwargs)
+
     _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME), OUINET_DIR_INFO)
     _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), DATA_DIR_INFO)
 
-    uri_hash = hashlib.sha1(uri.encode()).hexdigest()
+    uri_hash = hashlib.sha1(inj.uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, output_dir)
     if glob.glob(inj_prefix + '.*'):
-        logger.info("skipping URI with existing injection: %s", uri)
+        logger.info("skipping URI with existing injection: %s", inj.uri)
         return  # a descriptor for the URI already exists
-
-    # After all the previous checks, proceed to the real injection.
-    inj = inject_uri(uri, data_path, **kwargs)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
@@ -923,12 +922,11 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     The injections are stored into the `REPO_DATA_DIR_NAME` directory under `repo_dir`;
     the former is also created if missing.
     """
-    uri_hash = hashlib.sha1(uri.encode()).hexdigest()
+    inj = inject_uri(uri, data_path, **kwargs)
+
+    uri_hash = hashlib.sha1(inj.uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, repo_dir, REPO_DATA_DIR_NAME)
     os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
-
-    # After all the previous checks, proceed to the real injection.
-    inj = inject_uri(uri, data_path, **kwargs)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
