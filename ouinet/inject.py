@@ -243,7 +243,7 @@ def descriptor_from_injection(inj):
         # These are not part of the descriptor v0 spec,
         # they are added to ease tools locate body data files.
         'body_size': inj.data_size,
-        'body_digest': inj.data_digest,
+        'body_digest': 'SHA-256=' + base64.b64encode(inj.data_sha256_digest).decode(),
     }
     return desc
 
@@ -319,9 +319,9 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     >>> body = (b'0123' + b'x' * (bs - 8) + b'4567'
     ...         + b'89AB' + b'x' * (bs - 8) + b'CDEF'
     ...         + b'abcd')
-    >>> b64_digest = b64enc(sha256(body).digest()).decode()
-    >>> b64_digest
-    'E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE='
+    >>> body_digest = sha256(body).digest()
+    >>> b64enc(body_digest)
+    b'E4RswXyAONCaILm5T/ZezbHI87EKvKIdxURKxiVHwKE='
     >>>
     >>> head_s = b'''\
     ... HTTP/1.1 200 OK
@@ -372,7 +372,7 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     >>> ts_complete = ts + 1
     >>> class inj_complete(inj_incomplete):
     ...     data_size = len(body)
-    ...     data_digest = 'SHA-256=' + b64_digest
+    ...     data_sha256_digest = body_digest
     >>>
     >>> signed_ref_complete = b'''\
     ... HTTP/1.1 200 OK
@@ -414,8 +414,8 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
         to_sign.add_header(_hdr_bsigs, _http_bsigsfmt % (httpsig_key_id, inj.block_size))
     if hasattr(inj, 'data_size'):
         to_sign.add_header(_hdr_data_size, str(inj.data_size))
-    if hasattr(inj, 'data_digest'):
-        to_sign.add_header('Digest', inj.data_digest)
+    if hasattr(inj, 'data_sha256_digest'):
+        to_sign.add_header('Digest', 'SHA-256=' + base64.b64encode(inj.data_sha256_digest).decode())
     signature = http_signature(to_sign, httpsig_priv_key, httpsig_key_id, _ts=_ts)
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
@@ -518,10 +518,10 @@ def inject_uri(uri, data_path,
                meta_http_res_h=None, **kwargs):
     """Create injection data for the injection of the `uri`.
 
-    A tuple is returned with
+    An `Injection` instance is returned which includes
     a dictionary mapping different injection data tags to
-    their respective serialized data (as bytes),
-    and a digest of the data itself (as bytes).
+    their respective serialized data (as bytes) in ``tags``,
+    and a digest of the data itself (as bytes) in ``data_sha256_digest``.
     """
 
     # Prepare the injection.
@@ -530,8 +530,7 @@ def inject_uri(uri, data_path,
     inj.id = str(uuid.uuid4())
     inj.ts = time.time()
     inj.data_size = os.path.getsize(data_path)
-    data_digest = _digest_from_path(hashlib.sha256, data_path)
-    inj.data_digest = 'SHA-256=' + base64.b64encode(data_digest).decode()
+    inj.data_sha256_digest = _digest_from_path(hashlib.sha256, data_path)
     if bep44_priv_key:
         inj.data_ipfs_cid = _ipfs_cid_from_path(data_path)
     inj.block_size = _inject_block_size_default
@@ -540,7 +539,7 @@ def inject_uri(uri, data_path,
     for (k, v) in kwargs.items():  # other stuff like metadata
         setattr(inj, k, v)
 
-    inj_data = {}
+    inj.tags = {}
 
     if bep44_priv_key:
         # Generate the descriptor.
@@ -554,22 +553,22 @@ def inject_uri(uri, data_path,
                                   stdout=subprocess.PIPE, check=True)
         desc_link = b'/ipfs/' + ipfs_add.stdout.strip()
         desc_inline = b'/zlib/' + zlib.compress(desc_data)
-        inj_data[DESC_TAG] = desc_data
+        inj.tags[DESC_TAG] = desc_data
 
         # Prepare insertion of the descriptor into indexes.
         index_key = index_key_from_http_url(inj.uri)
         logger.debug("creating BEP44 insertion data for URI: %s", inj.uri)
-        inj_data[INS_TAG_PFX + 'bep44'] = bep44_insert(
+        inj.tags[INS_TAG_PFX + 'bep44'] = bep44_insert(
             index_key, desc_link, desc_inline, bep44_priv_key)
 
     # Create a signed HTTP response head.
     if httpsig_priv_key:
         logger.debug("creating HTTP signature for URI: %s", inj.uri)
-        inj_data[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
+        inj.tags[HTTP_SIG_TAG] = http_inject(inj, httpsig_priv_key, httpsig_key_id)
         logger.debug("creating block signatures for URI: %s", inj.uri)
-        inj_data[BLOCK_SIGS_TAG] = block_signatures(inj, data_path, httpsig_priv_key)
+        inj.tags[BLOCK_SIGS_TAG] = block_signatures(inj, data_path, httpsig_priv_key)
 
-    return (inj_data, data_digest)
+    return inj
 
 def inject_dir(input_dir, output_dir,
                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
@@ -868,13 +867,13 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
         return  # a descriptor for the URI already exists
 
     # After all the previous checks, proceed to the real injection.
-    (inj_data, data_digest) = inject_uri(uri, data_path, **kwargs)
+    inj = inject_uri(uri, data_path, **kwargs)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
     inj_dir = os.path.dirname(inj_prefix)
     os.makedirs(inj_prefix, exist_ok=True)
-    for (itag, idata) in inj_data.items():
+    for (itag, idata) in inj.tags.items():
         if itag == BLOCK_SIGS_TAG:
             continue  # handled separatedly
         if idata is None:
@@ -883,7 +882,7 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
     # Save block signatures.
-    block_sigs = inj_data.get(BLOCK_SIGS_TAG)
+    block_sigs = inj.tags.get(BLOCK_SIGS_TAG)
     if block_sigs:
         with open('%s.%s' % (inj_prefix, BLOCK_SIGS_TAG), 'wb') as sigsf:
             sigs_line_format = b'%x %s %s %s\n'
@@ -893,7 +892,7 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     # Hard-link the data file (if not already there).
     # TODO: look for better options
     # TODO: handle exceptions
-    out_data_path = data_path_from_data_digest(data_digest, output_dir)
+    out_data_path = data_path_from_data_digest(inj.data_sha256_digest, output_dir)
     if not os.path.exists(out_data_path):
         out_data_dir = os.path.dirname(out_data_path)
         os.makedirs(out_data_dir, exist_ok=True)
@@ -929,11 +928,11 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
     os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
 
     # After all the previous checks, proceed to the real injection.
-    (inj_data, _) = inject_uri(uri, data_path, **kwargs)
+    inj = inject_uri(uri, data_path, **kwargs)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
-    for (itag, idata) in inj_data.items():
+    for (itag, idata) in inj.tags.items():
         if itag == BLOCK_SIGS_TAG:
             continue  # handled separatedly
         if idata is None:
@@ -942,7 +941,7 @@ def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
             logger.debug("writing injection data (%s): uri_hash=%s", itag, uri_hash)
             injf.write(idata)
     # Save block signatures in signed HTTP storage v3 format.
-    block_sigs = inj_data[BLOCK_SIGS_TAG]
+    block_sigs = inj.tags[BLOCK_SIGS_TAG]
     with open(os.path.join(inj_prefix, 'sigs'), 'wb') as sigsf:
         _store_v3_block_sigs(block_sigs, sigsf)
 
