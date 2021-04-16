@@ -636,11 +636,12 @@ def inject_dir(input_dir, output_dir,
 
             # Trivial case, no decoding needed.
             if not txenc and not ctenc:
-                save_uri_injection(uri, datap, output_dir,
-                                   bep44_priv_key=bep44_priv_key,
-                                   httpsig_priv_key=httpsig_priv_key,
-                                   httpsig_key_id=httpsig_key_id,
-                                   meta_http_res_h=http_headers)
+                inj = inject_uri(uri, datap,
+                                 bep44_priv_key=bep44_priv_key,
+                                 httpsig_priv_key=httpsig_priv_key,
+                                 httpsig_key_id=httpsig_key_id,
+                                 meta_http_res_h=http_headers)
+                save_uri_injection(inj, datap, output_dir)
                 continue
 
             # Extract body data to a temporary file in the output directory,
@@ -658,11 +659,12 @@ def inject_dir(input_dir, output_dir,
                 datap = os.path.join(output_dir, dataf.name)
                 # Use length of identity-encoded data.
                 http_headers.replace_header('Content-Length', str(os.path.getsize(datap)))
-                save_uri_injection(uri, datap, output_dir,
-                                   bep44_priv_key=bep44_priv_key,
-                                   httpsig_priv_key=httpsig_priv_key,
-                                   httpsig_key_id=httpsig_key_id,
-                                   meta_http_res_h=http_headers)
+                inj = inject_uri(uri, datap,
+                                 bep44_priv_key=bep44_priv_key,
+                                 httpsig_priv_key=httpsig_priv_key,
+                                 httpsig_key_id=httpsig_key_id,
+                                 meta_http_res_h=http_headers)
+                save_uri_injection(inj, datap, output_dir)
 
 def inject_warc(warc_file, output_dir,
                 bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
@@ -730,11 +732,12 @@ def inject_warc(warc_file, output_dir,
             dataf.flush()
 
             datap = os.path.join(output_dir, dataf.name)
-            save_uri_injection(uri, datap, output_dir,
-                               bep44_priv_key=bep44_priv_key,
-                               httpsig_priv_key=httpsig_priv_key,
-                               httpsig_key_id=httpsig_key_id,
-                               meta_http_res_h=http_res_h)
+            inj = inject_uri(uri, datap,
+                             bep44_priv_key=bep44_priv_key,
+                             httpsig_priv_key=httpsig_priv_key,
+                             httpsig_key_id=httpsig_key_id,
+                             meta_http_res_h=http_res_h)
+            save_uri_injection(inj, datap, output_dir)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
@@ -838,18 +841,21 @@ def inject_static_root(root_dir, repo_dir, base_uri, use_short_group,
             fp = os.path.join(dirpath, fn)
             uri = dir_uri_prefix + quote(fn)
             head = _http_head_from_content_file(fp, root_dir)
-            save_static_injection(uri, fp, root_dir, repo_dir,
-                                  httpsig_priv_key=httpsig_priv_key,
-                                  httpsig_key_id=httpsig_key_id,
-                                  meta_http_res_h=head)
 
-            group = (group_shortened_uri(uri) if use_short_group else uri).encode('ascii')
-            group_add_uri(repo_dir, group, uri)
+            inj = inject_uri(uri, fp,
+                             httpsig_priv_key=httpsig_priv_key,
+                             httpsig_key_id=httpsig_key_id,
+                             meta_http_res_h=head)
 
-def save_uri_injection(uri, data_path, output_dir, **kwargs):
-    """Inject the `uri` and save insertion data to `output_dir`.
+            save_static_injection(inj, fp, root_dir, repo_dir)
 
-    This is only done if insertion data is not already present for the `uri`
+            group = (group_shortened_uri(inj.uri) if use_short_group else inj.uri).encode('ascii')
+            group_add_uri(repo_dir, group, inj.uri)
+
+def save_uri_injection(inj, data_path, output_dir):
+    """Save insertion data from injection `inj` to `output_dir`.
+
+    This is only done if insertion data is not already present for the URI
     in `output_dir`.
 
     Control data is stored under `OUINET_DIR_NAME` in `ouinet_dir`,
@@ -857,8 +863,6 @@ def save_uri_injection(uri, data_path, output_dir, **kwargs):
     See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
     the format of output files in these directories.
     """
-    inj = inject_uri(uri, data_path, **kwargs)
-
     _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME), OUINET_DIR_INFO)
     _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), DATA_DIR_INFO)
 
@@ -911,19 +915,17 @@ _repo_data_name_from_tag = {
     HTTP_SIG_TAG: 'head',
 }
 
-def save_static_injection(uri, data_path, root_dir, repo_dir, **kwargs):
-    """Inject the `uri` and save insertion data into the static cache `repo_dir`.
+def save_static_injection(inj, data_path, root_dir, repo_dir):
+    """Save insertion data from injection `inj` into the static cache `repo_dir`.
 
-    Existing insertion data for the `uri` is overwritten
-    (dropping body data for the `uri` if embedded in the repository).
+    Existing insertion data for the URI is overwritten
+    (dropping body data for the URI if embedded in the repository).
     Insertion data will refer to the file with the `data_path`,
     which must be under the given static cache `root_dir`.
 
     The injections are stored into the `REPO_DATA_DIR_NAME` directory under `repo_dir`;
     the former is also created if missing.
     """
-    inj = inject_uri(uri, data_path, **kwargs)
-
     uri_hash = hashlib.sha1(inj.uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, repo_dir, REPO_DATA_DIR_NAME)
     os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
