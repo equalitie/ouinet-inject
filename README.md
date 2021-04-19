@@ -1,21 +1,24 @@
 # Ouinet offline injector
 
 This script allows someone owning the necessary private keys to perform
-offline injection of content for later insertion into
-[Ouinet](https://github.com/equalitie/ouinet), e.g. using
-[ouinet-upload](https://github.com/equalitie/ouinet-upload).
+offline injection (signing) of content for later insertion into
+[Ouinet](https://github.com/equalitie/ouinet).
 
 ## Keys
 
-For the moment only two injection mechanisms are supported:
+Two injection mechanisms are supported:
 
-  - BitTorrent BEP44 keys for signing insertions into Ouinet's BEP44
-    distributed cache index.
-  - Ed25519 keys for creating signatures of HTTP response heads according to
-    <https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-12>.
+  - BitTorrent BEP44 keys for creating Ouinet URI descriptors that support
+    sharing resources over IPFS (obsolete).
+
+  - Ed25519 keys for creating a [Ouinet static cache][] repository with
+    signatures of HTTP response heads and bodies' data blocks, ready for
+    streaming to other users.
+
+[Ouinet static cache]: https://github.com/equalitie/ouinet/blob/master/doc/ouinet-network-whitepaper.md#out-of-band-cache-entry-exchange
 
 If you are running a Ouinet injector, you may use the ``ed25519-private-key``
-and ``ed25519-public-key`` files present in its repository directory.
+file present in its repository directory.
 
 ## Input
 
