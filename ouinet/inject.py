@@ -867,6 +867,8 @@ def inject_static_root(input_dir, output_dir, overwrite,
     for (dirpath, dirnames, filenames) in os.walk(root_dir):
         if os.path.commonpath([dirpath, repo_dir]) == repo_dir:   # i.e. repo under root dir
             continue
+        if OUINET_DIR_NAME in os.path.relpath(dirpath, root_dir).split(os.path.sep):
+            continue
         # E.g. with `http://foo.bar/' and `/path/to/root`,
         # `/path/to/root/blah/blàh` -> `http://foo.bar/blah/bl%C3%A0h/`.
         dir_uri_prefix = '%s%s/' % (base_uri, quote(dirpath[len(root_dir):].replace(os.path.sep, '/')))
