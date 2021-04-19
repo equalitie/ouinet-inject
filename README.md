@@ -22,27 +22,31 @@ file present in its repository directory.
 
 ## Input
 
-The only content supported at the moment are HTTP GET exchanges consisting of
-a request and a response made of an HTTP response head and body.  These can be
-provided either via a WARC file (e.g. coming from web crawling) or using an ad
-hoc file-based format.
+Three kinds of input are supported:
 
-Please see <https://en.wikipedia.org/wiki/Web_ARChive> for more information on
-the WARC file format and tools to produce it.
+  - HTTP GET responses stored as head and body in an ad hoc file-based format
+    (obsolete).
 
-See the doc string of `ouinet.inject.inject_dir()` for a description of the ad
-hoc input format.
+    See the doc string of `ouinet.inject.inject_dir()` for a description of
+    this format.
+
+  - A WARC file coming from web crawling.
+
+    See <https://en.wikipedia.org/wiki/Web_ARChive> for more information on
+    the WARC file format and tools to produce it.
+
+  - An arbitrary hierarchy of content files and directories plus a base URL,
+    so that ``ROOT/path/to/file.txt`` with ``https://example.com/base/``
+    becomes ``https://example.com/base/path/to/file.txt``.
 
 ## Output
 
-The script produces a set of injection and content data files which are added
-to a given output directory.  That directory can be circulated and used as
-input to ``ouinet-upload`` on a different machine running a Ouinet client
-configured to trust the public keys matching the private keys used for
-injection.
-
-Please look for ``readme.txt`` files in the output directory for a description
-of its format.
+The script produces a set of insertion and (depending on the kind of input)
+content data files which are added to a given output directory.  That
+directory can then be circulated and used on a different machine running a
+Ouinet client (configured to trust the public keys matching the private keys
+used for injection) and used there as if the content was retrieved over the
+Ouinet network (e.g. for local access or seeding to others).
 
 Only a single injection per URI is supported.  Subsequent injections of the
 same URI will be skipped.
