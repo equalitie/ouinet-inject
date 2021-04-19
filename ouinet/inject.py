@@ -117,6 +117,8 @@ There are two subdirectories under this repository:
     its items.
 """ % (REPO_DATA_DIR_NAME, REPO_GROUPS_DIR_NAME)
 
+OUTPUT_OVERWRITE = ('never', 'older', 'always')
+
 logger = logging.getLogger(__name__)
 
 
@@ -573,9 +575,12 @@ def inject_uri(uri, data_path,
 
     return inj
 
-def inject_dir(input_dir, output_dir,
+def inject_dir(input_dir, output_dir, overwrite,
                bep44_priv_key=None, httpsig_priv_key=None, httpsig_key_id=None):
     """Sign content from `input_dir`, put insertion data in `output_dir`.
+
+    Existing entries are overwritten according to `overwite`
+    (see `OUTPUT_OVERWRITE`).
 
     `bep44_priv_key` is the Ed25519 private key to be used to
     sign insertions into the BEP44 index.
@@ -644,7 +649,7 @@ def inject_dir(input_dir, output_dir,
                                  httpsig_priv_key=httpsig_priv_key,
                                  httpsig_key_id=httpsig_key_id,
                                  meta_http_res_h=http_headers)
-                save_uri_injection(inj, datap, output_dir)
+                save_uri_injection(inj, datap, output_dir, overwrite)
                 continue
 
             # Extract body data to a temporary file in the output directory,
@@ -667,9 +672,10 @@ def inject_dir(input_dir, output_dir,
                                  httpsig_priv_key=httpsig_priv_key,
                                  httpsig_key_id=httpsig_key_id,
                                  meta_http_res_h=http_headers)
-                save_uri_injection(inj, datap, output_dir)
+                save_uri_injection(inj, datap, output_dir, overwrite)
 
-def inject_warc(warc_file, output_dir, use_short_group,
+def inject_warc(warc_file, output_dir, overwrite,
+                use_short_group,
                 httpsig_priv_key, httpsig_key_id):
     if not httpsig_priv_key or not httpsig_key_id:
         raise ValueError("missing private key for HTTP signatures")
@@ -758,7 +764,8 @@ def inject_warc(warc_file, output_dir, use_short_group,
                 logger.debug("linking data file: uri=%s", inj.uri)
                 os.link(tmp_datap, datap)
 
-            save_static_injection(inj, datap, root_dir, repo_dir)
+            if not save_static_injection(inj, datap, root_dir, repo_dir, overwrite):
+                continue
 
             group = (group_shortened_uri(inj.uri) if use_short_group else inj.uri).encode('ascii')
             group_add_uri(repo_dir, group, inj.uri)
@@ -821,9 +828,13 @@ def group_add_uri(repo_dir, group, uri):
         logger.debug("adding item %s to group %r", uri, group)
         inamef.write(uri_bs)
 
-def inject_static_root(input_dir, output_dir, base_uri, use_short_group,
+def inject_static_root(input_dir, output_dir, overwrite,
+                       base_uri, use_short_group,
                        httpsig_priv_key, httpsig_key_id):
     """Sign content from `input_dir`, put insertion data under `output_dir`.
+
+    Existing entries are overwritten according to `overwite`
+    (see `OUTPUT_OVERWRITE`).
 
     A URI and HTTP head will be synthesized for each file under the static cache root `input_dir`,
     with the URI having `base_uri` as a prefix and the ``path/to/file`` as a suffix.
@@ -869,30 +880,33 @@ def inject_static_root(input_dir, output_dir, base_uri, use_short_group,
                              httpsig_key_id=httpsig_key_id,
                              meta_http_res_h=head)
 
-            save_static_injection(inj, fp, root_dir, repo_dir)
+            if not save_static_injection(inj, fp, root_dir, repo_dir, overwrite):
+                continue
 
             group = (group_shortened_uri(inj.uri) if use_short_group else inj.uri).encode('ascii')
             group_add_uri(repo_dir, group, inj.uri)
 
-def save_uri_injection(inj, data_path, output_dir):
+def save_uri_injection(inj, data_path, output_dir, overwrite):
     """Save insertion data from injection `inj` to `output_dir`.
 
-    This is only done if insertion data is not already present for the URI
-    in `output_dir`.
+    An existing entry for the URI in `output_dir` is overwritten according to `overwite`
+    (see `OUTPUT_OVERWRITE`).
 
     Control data is stored under `OUINET_DIR_NAME` in `ouinet_dir`,
     and content data is hard-linked under `DATA_DIR_NAME` in `ouinet_dir`.
     See `OUINET_DIR_INFO` and `DATA_DIR_INFO` for
     the format of output files in these directories.
+
+    Return whether the injection was saved or not.
     """
     _maybe_add_readme(os.path.join(output_dir, OUINET_DIR_NAME), OUINET_DIR_INFO)
     _maybe_add_readme(os.path.join(output_dir, DATA_DIR_NAME), DATA_DIR_INFO)
 
     uri_hash = hashlib.sha1(inj.uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, output_dir)
-    if glob.glob(inj_prefix + '.*'):
+    if glob.glob(inj_prefix + '.*'):  # TODO: handle `overwrite`
         logger.info("skipping URI with existing injection: %s", inj.uri)
-        return  # a descriptor for the URI already exists
+        return False  # a descriptor for the URI already exists
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
@@ -924,6 +938,8 @@ def save_uri_injection(inj, data_path, output_dir):
         logger.debug("linking data file: uri_hash=%s", uri_hash)
         os.link(data_path, out_data_path)
 
+    return True
+
 _data_v3_no_previous_chash = base64.b64encode(bytes(64))
 _data_v3_sigs_line_format = b'%016x %s %s %s\n'
 
@@ -937,19 +953,24 @@ _repo_data_name_from_tag = {
     HTTP_SIG_TAG: 'head',
 }
 
-def save_static_injection(inj, data_path, root_dir, repo_dir):
+def save_static_injection(inj, data_path, root_dir, repo_dir, overwrite):
     """Save insertion data from injection `inj` into the static cache `repo_dir`.
 
-    Existing insertion data for the URI is overwritten
-    (dropping body data for the URI if embedded in the repository).
+    An existing entry for the URI in `output_dir` is overwritten according to `overwite`,
+    dropping body data for the URI if embedded in the repository
+    (see `OUTPUT_OVERWRITE`).
+
     Insertion data will refer to the file with the `data_path`,
     which must be under the given static cache `root_dir`.
 
     The injections are stored into the `REPO_DATA_DIR_NAME` directory under `repo_dir`;
     the former is also created if missing.
+
+    Return whether the injection was saved or not.
     """
     uri_hash = hashlib.sha1(inj.uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, repo_dir, REPO_DATA_DIR_NAME)
+    # TODO: handle `overwrite`
     os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
 
     # Write descriptor and insertion data to the output directory.
@@ -981,6 +1002,8 @@ def save_static_injection(inj, data_path, root_dir, repo_dir):
     with open(bodypp, 'wb') as bodypf:
         logger.debug("writing content file body reference: uri_hash=%s", uri_hash)
         bodypf.write(body_path)
+
+    return True
 
 def _private_key_from_arg(priv_key):
     """Return the Ed25519 private key in command-line argument `priv_key`.
@@ -1024,6 +1047,14 @@ def main():
               "when computing its associated resource group"
               ))
     parser.add_argument(
+        '--overwrite', metavar='WHEN', default='never', choices=OUTPUT_OVERWRITE,
+        help=("when to overwrite existing cache entries; "
+              "\"never\" always keeps the entry, "
+              "\"older\" replaces entries older than the input, "
+              "\"always\" always replaces the entry "
+              "(default: never)"
+              ))
+    parser.add_argument(
         # Normalize to avoid confusing ``os.path.{base,dir}name()``.
         'input', metavar="INPUT_DIR|INPUT_WARC", type=os.path.normpath,
         help=("the directory where static cache content or HTTP exchanges are read from, "
@@ -1047,14 +1078,18 @@ def main():
 
     if not os.path.isdir(args.input):
         with open(args.input, 'rb') as warcf:
-            inject_warc(warcf, args.output_directory, use_short_group=args.use_short_group,
+            inject_warc(warcf, args.output_directory,
+                        overwrite=args.overwrite,
+                        use_short_group=args.use_short_group,
                         httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     elif not args.content_base_uri:
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
+                   overwrite=args.overwrite,
                    bep44_priv_key=bep44_sk,
                    httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     else:
         inject_static_root(input_dir=args.input, output_dir=args.output_directory,
+                           overwrite=args.overwrite,
                            base_uri=args.content_base_uri, use_short_group=args.use_short_group,
                            httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
