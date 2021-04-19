@@ -970,8 +970,16 @@ def save_static_injection(inj, data_path, root_dir, repo_dir, overwrite):
     """
     uri_hash = hashlib.sha1(inj.uri.encode()).hexdigest()
     inj_prefix = inj_prefix_from_uri_hash(uri_hash, repo_dir, REPO_DATA_DIR_NAME)
-    # TODO: handle `overwrite`
-    os.makedirs(inj_prefix, exist_ok=True)  # injection data will be overwritten
+
+    headp = os.path.join(inj_prefix, 'head')
+    if os.path.exists(headp):  # TODO: use more elaborate time stamps
+        existing_ts = os.stat(headp).st_mtime
+        new_ts = os.stat(data_path).st_mtime
+        if not shall_overwrite_existing(overwrite, existing_ts, new_ts):
+            logger.info("skipping URI with existing injection: %s", inj.uri)
+            return
+        logger.info("overwriting URI with existing injection: %s", inj.uri)
+    os.makedirs(inj_prefix, exist_ok=True)
 
     # Write descriptor and insertion data to the output directory.
     # TODO: handle exceptions
@@ -1004,6 +1012,15 @@ def save_static_injection(inj, data_path, root_dir, repo_dir, overwrite):
         bodypf.write(body_path)
 
     return True
+
+def shall_overwrite_existing(overwrite, existing_ts, new_ts):
+    if overwrite == 'never':
+        return False
+    if overwrite == 'always':
+        return True
+    if overwrite == 'older':
+        return existing_ts < new_ts
+    raise ValueError("invalid overwrite policy: %r" % overwrite)
 
 def _private_key_from_arg(priv_key):
     """Return the Ed25519 private key in command-line argument `priv_key`.
