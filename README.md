@@ -75,18 +75,11 @@ To inject the content in ``INPUT.warc.gz`` and put injection data in
 ``OUTPUT_DIR``, run:
 
     $ python3 -m ouinet.inject \
-      --bep44-private-key=/path/to/bep44.key \
       --httpsig-private-key=/path/to/httpsig.key \
       INPUT.warc.gz OUTPUT_DIR
 
-Where ``/path/to/{bep44,httpsig}.key`` should contain the hex-encoded
-*private* BitTorrent BEP44 or HTTP signatures keys, respectively.  Please keep
-those keys secret and safe!  The matching *public* keys will be printed as
-part of the program's diagnostics.
+Where ``/path/to/httpsig.key`` should contain the hex-encoded *private*
+signature key.  Please keep that key secret and safe!  The matching *public*
+key will be printed as part of the program's diagnostics.
 
-To insert the content stored in `OUTPUT_DIR` from another machine using
-``ouinet-upload``, run:
 
-    $ python3 -m ouinet.upload DIRECTORY seed
-
-(See ``ouinet-upload``'s documentation for more information.)
