@@ -84,6 +84,20 @@ Where ``/path/to/httpsig.key`` should contain the hex-encoded *private*
 signature key.  Please keep that key secret and safe!  The matching *public*
 key will be printed as part of the program's diagnostics.
 
+To inject a hierarchy of files and directories, you also need to specify a
+base URL to synthesize full HTTP responses to be injected:
+
+    $ python3 -m ouinet.inject \
+      --httpsig-private-key=/path/to/httpsig.key \
+      --content-base-uri=https://example.com/pub/files/ \
+      INPUT_DIR OUTPUT_DIR
+
+So that ``INPUT_DIR/images/index.html`` becomes accessible via the URL
+``https://example.com/pub/files/images/index.html``.  Please note that in this
+case it is safe to use the input directory as the output directory, as
+insertion data will just sit along the data files and point to them to avoid
+duplication.  Then you only need to distribute the ``INPUT_DIR`` (instead of
+both the ``INPUT_DIR`` and ``OUTPUT_DIR``).
 
 Please note that running the script on an output directory with existing
 insertion data or content will add the new injections to it without
