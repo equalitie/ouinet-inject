@@ -61,11 +61,13 @@ Python dependencies with:
 
     $ pip install -r requirements.txt
 
-You will also need to have the ``ipfs`` binary on your search path and an
-initialized IPFS repo (i.e. run ``ipfs init``).  Please note that the binary
-will only be used for some hash computations and that neither a running IPFS
-daemon nor connection to the Internet are needed, and no changes to your IPFS
-repo will happen.
+Of course, you can also do this in a virtual environment.
+
+For injection using BEP44 keys (obsolete), you will also need to have the
+``ipfs`` binary on your search path and an initialized IPFS repo (i.e. run
+``ipfs init``).  Please note that the binary will only be used for some hash
+computations and that neither a running IPFS daemon nor a connection to the
+Internet are needed, and no changes to your IPFS repo will happen.
 
 ## Usage
 
