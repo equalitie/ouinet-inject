@@ -96,8 +96,8 @@ So that ``INPUT_DIR/images/index.html`` becomes accessible via the URL
 ``https://example.com/pub/files/images/index.html``.  Please note that in this
 case it is safe to use the input directory as the output directory, as
 insertion data will just sit along the data files and point to them to avoid
-duplication.  Then you only need to distribute the ``INPUT_DIR`` (instead of
-both the ``INPUT_DIR`` and ``OUTPUT_DIR``).
+duplication.  Like that, you only need to distribute the resulting
+``INPUT_DIR`` (instead of both the ``INPUT_DIR`` and the ``OUTPUT_DIR``).
 
 Please note that running the script on an output directory with existing
 insertion data or content will add the new injections to it without
