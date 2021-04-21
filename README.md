@@ -18,7 +18,10 @@ Two injection mechanisms are supported:
 [Ouinet static cache]: https://github.com/equalitie/ouinet/blob/master/doc/ouinet-network-whitepaper.md#out-of-band-cache-entry-exchange
 
 If you are running a Ouinet injector, you may use the ``ed25519-private-key``
-file present in its repository directory.
+file present in its repository directory.  If you have PyNaCl installed (see
+[Setup](#setup) below), you can also generate a test key with:
+
+    $ python3 -c 'import nacl.signing as S; print(S.SigningKey.generate().encode().hex())' > sig.key
 
 ## Input
 
