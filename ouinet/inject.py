@@ -1061,9 +1061,14 @@ def main():
               "for content files in the INPUT_DIR static cache root"
               ))
     parser.add_argument(
-        '--use-short-group', default=False, action=argparse.BooleanOptionalAction,
+        '--use-short-group', default=False, action='store_true',
         help=("remove scheme, leading \"www.\" and trailing slashes from the resource URI "
               "when computing its associated resource group"
+              ))
+    parser.add_argument(
+        '--no-use-short-group', dest='use_short_group', action='store_false',
+        help=("use resource URI as is "
+              "when computing its associated resource group (default)"
               ))
     parser.add_argument(
         '--overwrite', metavar='WHEN', default='never', choices=OUTPUT_OVERWRITE,
