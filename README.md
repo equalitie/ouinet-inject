@@ -51,9 +51,10 @@ Ouinet client (configured to trust the public keys matching the private keys
 used for injection) and used there as if the content was retrieved over the
 Ouinet network (e.g. for local access or seeding to others).
 
-Only a single injection per URI is supported, and each URI is made part of its
-own resource group.  Please note that this can result in a considerable number
-of resource groups to be announced by the receiving client.  More sensible
+Only a single injection per URI is supported.  The creation of resource groups
+can be customized to a certain point by using the ``--group`` option.  Please
+note that certain grouping methods can result in a considerable number of
+resource groups to be announced by the receiving client.  More sensible
 grouping mechanisms will be added in the future.
 
 Please look for ``readme.txt`` files under the output directory for a

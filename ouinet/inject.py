@@ -119,6 +119,12 @@ There are two subdirectories under this repository:
 
 OUTPUT_OVERWRITE = ('never', 'older', 'always')
 
+GROUP_METHODS = {
+    'none': None,
+    'uri': lambda uri: uri.encode('ascii'),
+    'web-short': lambda uri: _group_shortened_uri(uri).encode('ascii'),
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -675,7 +681,7 @@ def inject_dir(input_dir, output_dir, overwrite,
                 save_uri_injection(inj, datap, output_dir, overwrite)
 
 def inject_warc(warc_file, output_dir, overwrite,
-                use_short_group,
+                group_from_uri,
                 httpsig_priv_key, httpsig_key_id):
     if not httpsig_priv_key or not httpsig_key_id:
         raise ValueError("missing private key for HTTP signatures")
@@ -767,8 +773,8 @@ def inject_warc(warc_file, output_dir, overwrite,
             if not save_static_injection(inj, datap, root_dir, repo_dir, overwrite):
                 continue
 
-            group = (group_shortened_uri(inj.uri) if use_short_group else inj.uri).encode('ascii')
-            group_add_uri(repo_dir, group, inj.uri)
+            if group_from_uri:
+                group_add_uri(repo_dir, group_from_uri(inj.uri), inj.uri)
 
     logger.debug("dropped %d non-GET responses", len(seen_get_resp))
 
@@ -792,10 +798,10 @@ def _http_head_from_content_file(fpath, root_dir):
 _shortened_uri_head_rx = re.compile(r'^[a-z][-+.0-9a-z]*://(?:www\.)?(.*)$')
 _shortened_uri_tail_rx = re.compile(r'(/+)$')
 
-def group_shortened_uri(uri):
+def _group_shortened_uri(uri):
     """Shorten `uri` by removing the scheme, leading ``www.`` and trailing slashes.
 
-    >>> group_shortened_uri('https://www.example.com/foo/bar/')
+    >>> _group_shortened_uri('https://www.example.com/foo/bar/')
     'example.com/foo/bar'
     """
     uri = uri.split('#', 1)[0]  # drop fragment, just in case
@@ -829,7 +835,7 @@ def group_add_uri(repo_dir, group, uri):
         inamef.write(uri_bs)
 
 def inject_static_root(input_dir, output_dir, overwrite,
-                       base_uri, use_short_group,
+                       base_uri, group_from_uri,
                        httpsig_priv_key, httpsig_key_id):
     """Sign content from `input_dir`, put insertion data under `output_dir`.
 
@@ -843,10 +849,9 @@ def inject_static_root(input_dir, output_dir, overwrite,
     create HTTP signatures.
     `httpsig_key_id` is an identifier for that key in signatures.
 
-    A separate resource group is created for each inserted file,
-    with the associated URI as the group's name.
-    If `use_short_group` is true, the group's name is shortened by
-    removing the scheme, leading ``www.`` and trailing slashes from the URI.
+    If a callable `group_from_uri` is provided,
+    it is used to derive a resource group from the URI associated with each inserted file,
+    and the URI is added to that group.
 
     See `REPO_DIR_INFO` for more information on
     the storage of injections and resource groups in the static cache repository under `output_dir`.
@@ -885,8 +890,8 @@ def inject_static_root(input_dir, output_dir, overwrite,
             if not save_static_injection(inj, fp, root_dir, repo_dir, overwrite):
                 continue
 
-            group = (group_shortened_uri(inj.uri) if use_short_group else inj.uri).encode('ascii')
-            group_add_uri(repo_dir, group, inj.uri)
+            if group_from_uri:
+                group_add_uri(repo_dir, group_from_uri(inj.uri), inj.uri)
 
 def save_uri_injection(inj, data_path, output_dir, overwrite):
     """Save insertion data from injection `inj` to `output_dir`.
@@ -1061,14 +1066,12 @@ def main():
               "for content files in the INPUT_DIR static cache root"
               ))
     parser.add_argument(
-        '--use-short-group', default=False, action='store_true',
-        help=("remove scheme, leading \"www.\" and trailing slashes from the resource URI "
-              "when computing its associated resource group"
-              ))
-    parser.add_argument(
-        '--no-use-short-group', dest='use_short_group', action='store_false',
-        help=("use resource URI as is "
-              "when computing its associated resource group (default)"
+        '--group', metavar='METHOD', default='none', choices=GROUP_METHODS,
+        help=("use the given METHOD to generate resource groups (to announce content); "
+              "\"none\" generates no groups (local browsing only), "
+              "\"uri\" creates one group per injected URI, "
+              "\"web-short\" removes scheme, leading \"www.\" and trailing slashes from the URI "
+              "(default: none)"
               ))
     parser.add_argument(
         '--overwrite', metavar='WHEN', default='never', choices=OUTPUT_OVERWRITE,
@@ -1104,7 +1107,7 @@ def main():
         with open(args.input, 'rb') as warcf:
             inject_warc(warcf, args.output_directory,
                         overwrite=args.overwrite,
-                        use_short_group=args.use_short_group,
+                        group_from_uri=GROUP_METHODS[args.group],
                         httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
     elif not args.content_base_uri:
         inject_dir(input_dir=args.input, output_dir=args.output_directory,
@@ -1114,7 +1117,7 @@ def main():
     else:
         inject_static_root(input_dir=args.input, output_dir=args.output_directory,
                            overwrite=args.overwrite,
-                           base_uri=args.content_base_uri, use_short_group=args.use_short_group,
+                           base_uri=args.content_base_uri, group_from_uri=GROUP_METHODS[args.group],
                            httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
 if __name__ == '__main__':
