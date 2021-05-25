@@ -124,6 +124,7 @@ GROUP_METHODS = {
     'uri': lambda uri: uri.encode('ascii'),
     'web-short': lambda uri: _group_shortened_uri(uri).encode('ascii'),
     'uri-dir': lambda uri: _group_uri_dir(uri).encode('ascii'),
+    'cmd': lambda uri: _group_cmd_on_uri(uri).encode('ascii'),
 }
 
 logger = logging.getLogger(__name__)
@@ -813,6 +814,13 @@ def _group_uri_dir(uri):
     uri = uri.split('#', 1)[0]  # drop fragment, just in case
     return os.path.dirname(uri.split('://', 1)[1].split('/', 1)[1])
 
+def _group_cmd_on_uri(uri):
+    cmd = os.getenv('OUINET_GROUP_CMD')
+    if not cmd:
+        raise RuntimeError("environment variable $OUINET_GROUP_CMD is not set")
+    proc = subprocess.run([cmd, uri], capture_output=True, check=True, text=True)
+    return proc.stdout.strip()
+
 def group_add_uri(repo_dir, group, uri):
     """Add the given `uri` (string) to the resource `group` (bytes).
 
@@ -1076,7 +1084,8 @@ def main():
               "\"none\" generates no groups (local browsing only); "
               "\"uri\" creates one group per injected URI; "
               "\"uri-dir\" uses the parent directory of the resource path, relative to the URI root; "
-              "\"web-short\" removes scheme, leading \"www.\" and trailing slashes from the URI "
+              "\"web-short\" removes scheme, leading \"www.\" and trailing slashes from the URI; "
+              "\"cmd\" runs \"$OUINET_GROUP_CMD <URI>\" and uses its output as a group "
               "(default: none)"
               ))
     parser.add_argument(
