@@ -127,6 +127,9 @@ GROUP_METHODS = {
     'cmd': lambda uri: _group_cmd_on_uri(uri).encode('ascii'),
 }
 
+OUINET_GROUP_CMD_VAR = 'OUINET_GROUP_CMD'
+_group_cmd = os.getenv(OUINET_GROUP_CMD_VAR)
+
 logger = logging.getLogger(__name__)
 
 
@@ -815,10 +818,9 @@ def _group_uri_dir(uri):
     return os.path.dirname(uri.split('://', 1)[1].split('/', 1)[1])
 
 def _group_cmd_on_uri(uri):
-    cmd = os.getenv('OUINET_GROUP_CMD')
-    if not cmd:
-        raise RuntimeError("environment variable $OUINET_GROUP_CMD is not set")
-    proc = subprocess.run([cmd, uri], capture_output=True, check=True, text=True)
+    if not _group_cmd:
+        raise RuntimeError("environment variable %s is not set" % OUINET_GROUP_CMD_VAR)
+    proc = subprocess.run([_group_cmd, uri], capture_output=True, check=True, text=True)
     return proc.stdout.strip()
 
 def group_add_uri(repo_dir, group, uri):
@@ -1085,9 +1087,10 @@ def main():
               "\"uri\" creates one group per injected URI; "
               "\"uri-dir\" uses the parent directory of the resource path, relative to the URI root; "
               "\"web-short\" removes scheme, leading \"www.\" and trailing slashes from the URI; "
-              "\"cmd\" runs \"$OUINET_GROUP_CMD <URI>\" and uses its output as a group "
-              "(default: none)"
-              ))
+              "\"cmd\" runs \"${0} <URI>\" and uses its output as a group "
+              "(default: none)".format(
+                  OUINET_GROUP_CMD_VAR
+              )))
     parser.add_argument(
         '--overwrite', metavar='WHEN', default='never', choices=OUTPUT_OVERWRITE,
         help=("when to overwrite existing cache entries; "
