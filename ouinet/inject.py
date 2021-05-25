@@ -123,6 +123,7 @@ GROUP_METHODS = {
     'none': None,
     'uri': lambda uri: uri.encode('ascii'),
     'web-short': lambda uri: _group_shortened_uri(uri).encode('ascii'),
+    'uri-dir': lambda uri: _group_uri_dir(uri).encode('ascii'),
 }
 
 logger = logging.getLogger(__name__)
@@ -808,6 +809,10 @@ def _group_shortened_uri(uri):
     uri = _shortened_uri_head_rx.sub(r'\1', uri)
     return _shortened_uri_tail_rx.sub('', uri)
 
+def _group_uri_dir(uri):
+    uri = uri.split('#', 1)[0]  # drop fragment, just in case
+    return os.path.dirname(uri.split('://', 1)[1].split('/', 1)[1])
+
 def group_add_uri(repo_dir, group, uri):
     """Add the given `uri` (string) to the resource `group` (bytes).
 
@@ -1070,6 +1075,7 @@ def main():
         help=("use the given METHOD to generate resource groups (to announce content); "
               "\"none\" generates no groups (local browsing only), "
               "\"uri\" creates one group per injected URI, "
+              "\"uri-dir\" uses the parent directory of the resource path, relative to the URI root, "
               "\"web-short\" removes scheme, leading \"www.\" and trailing slashes from the URI "
               "(default: none)"
               ))
