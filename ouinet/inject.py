@@ -786,14 +786,11 @@ def inject_warc(warc_file, output_dir, overwrite,
 def _http_time_from_posix(ts):
     return time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(ts))
 
-def _http_head_from_content_file(fpath, root_dir):
+def _http_head_from_content_file(fpath, root_dir, ctype_from_fpath):
     headers = []
-    (mtype, menc) = mimetypes.guess_type(fpath)
-    if mtype:
+    (mtype, menc) = ctype_from_fpath(fpath, root_dir)
+    if mtype:  # else do not add header, see RFC7231#3.1.1.5
         headers.append(('Content-Type', mtype))
-    else:  # do not add header, see RFC7231#3.1.1.5
-        logger.warning("failed to guess MIME type for content file: %s",
-                       os.path.relpath(fpath, root_dir))
     if menc:
         headers.append(('Content-Encoding', menc))
     mtime = os.stat(fpath).st_mtime
@@ -850,7 +847,7 @@ def group_add_uri(repo_dir, group, uri):
         inamef.write(uri_bs)
 
 def inject_static_root(input_dir, output_dir, overwrite,
-                       base_uri, group_from_uri,
+                       base_uri, ctype_from_fpath, group_from_uri,
                        httpsig_priv_key, httpsig_key_id):
     """Sign content from `input_dir`, put insertion data under `output_dir`.
 
@@ -863,6 +860,9 @@ def inject_static_root(input_dir, output_dir, overwrite,
     `httpsig_priv_key` is the Ed25519 private key to be used to
     create HTTP signatures.
     `httpsig_key_id` is an identifier for that key in signatures.
+
+    The `ctype_from_fpath` callable returns ``(content_type, content_encoding)``
+    from a file path and the static cache root.
 
     If a callable `group_from_uri` is provided,
     it is used to derive a resource group from the URI associated with each inserted file,
@@ -895,7 +895,7 @@ def inject_static_root(input_dir, output_dir, overwrite,
         for fn in filenames:
             fp = os.path.join(dirpath, fn)
             uri = dir_uri_prefix + quote(fn)
-            head = _http_head_from_content_file(fp, root_dir)
+            head = _http_head_from_content_file(fp, root_dir, ctype_from_fpath)
 
             inj = inject_uri(uri, fp,
                              httpsig_priv_key=httpsig_priv_key,
@@ -1162,7 +1162,8 @@ def main():
     else:
         inject_static_root(input_dir=args.input, output_dir=args.output_directory,
                            overwrite=args.overwrite,
-                           base_uri=args.content_base_uri, group_from_uri=GROUP_METHODS[args.group],
+                           base_uri=args.content_base_uri, ctype_from_fpath=args.content_type,
+                           group_from_uri=GROUP_METHODS[args.group],
                            httpsig_priv_key=httpsig_sk, httpsig_key_id=httpsig_kid)
 
 if __name__ == '__main__':
