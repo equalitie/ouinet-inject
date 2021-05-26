@@ -1058,6 +1058,25 @@ def _private_key_from_arg(priv_key):
             nacl.signing.SignedMessage.fromhex(priv_key))
         return priv_key
 
+_content_type_rx = re.compile(r'^[^/]+/[^/]+$')
+def _content_type(type_):
+    if type_ == 'none':
+        return (lambda fpath, root_dir: (None, None))
+
+    if type_ == 'auto':
+        def guess_media_type(fpath, root_dir):
+            (mtype, menc) = mimetypes.guess_type(fpath)
+            if not mtype:
+                logger.warning("failed to guess MIME type for content file: %s",
+                               os.path.relpath(fpath, root_dir))
+            return (mtype, menc)
+        return guess_media_type
+
+    if _content_type_rx.match(type_):
+        return (lambda fpath, root_dir: (type_.lower(), None))
+
+    raise ValueError
+
 def main():
     parser = argparse.ArgumentParser(
         description="Sign content to be published using Ouinet.")
@@ -1079,6 +1098,14 @@ def main():
         '--content-base-uri', metavar="URI", default='',
         help=("a base URI to synthesize HTTP response headers "
               "for content files in the INPUT_DIR static cache root"
+              ))
+    parser.add_argument(
+        '--content-type', metavar="TYPE", default='auto', type=_content_type,
+        help=("when working on a static cache, use the given TYPE for each resource's \"Content-Type\": "
+              "\"none\" avoids it altogether; "
+              "\"auto\" tries to guess it from the file name; "
+              "\"TYPE/SUBTYPE\" always uses that as content type "
+              "(default: auto)"
               ))
     parser.add_argument(
         '--group', metavar='METHOD', default='none', choices=GROUP_METHODS,
