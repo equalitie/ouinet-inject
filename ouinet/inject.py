@@ -817,7 +817,7 @@ def _group_uri_dir(uri):
 def _group_cmd_on_uri(uri):
     if not _group_cmd:
         raise RuntimeError("environment variable %s is not set" % OUINET_GROUP_CMD_VAR)
-    proc = subprocess.run([_group_cmd, uri], capture_output=True, check=True, text=True)
+    proc = subprocess.run([_group_cmd, uri], stdout=subprocess.PIPE, check=True, text=True)
     return proc.stdout.strip()
 
 def group_add_uri(repo_dir, group, uri):
