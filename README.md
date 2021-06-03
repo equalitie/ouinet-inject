@@ -109,3 +109,9 @@ overwriting or deleting existing files.  This is equivalent to indicating
 ``--overwrite=never``.  You can also use ``--overwrite=always`` (overwrites
 all existing insertion data, never content files), or ``--overwrite=older``
 (overwrites insertion data older than content in the input directory).
+
+You can use the ``--content-type`` option to control how ``Content-Type`` and
+``Content-Encoding`` headers are assigned to synthesized HTTP responses.  By
+default, MIME types are inferred from the file name (customizable via files in
+`mimetypes.knownfiles`), but you can also use a common type for all files, or
+no type at all.
