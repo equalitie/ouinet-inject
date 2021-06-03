@@ -1110,7 +1110,7 @@ def main():
     parser.add_argument(
         '--group', metavar='METHOD', default='none', choices=GROUP_METHODS,
         help=("use the given METHOD to generate resource groups (to announce content): "
-              "\"none\" generates no groups (local browsing only); "
+              "\"none\" generates no groups (local access only); "
               "\"uri\" creates one group per injected URI; "
               "\"uri-dir\" uses the parent directory of the resource path, relative to the URI root; "
               "\"web-short\" removes scheme, leading \"www.\" and trailing slashes from the URI; "
