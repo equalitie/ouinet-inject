@@ -115,3 +115,12 @@ You can use the ``--content-type`` option to control how ``Content-Type`` and
 default, MIME types are inferred from the file name (customizable via files in
 `mimetypes.knownfiles`), but you can also use a common type for all files, or
 no type at all.
+
+The ``--group`` option allows you to control how Ouinet clients will announce
+contents from a static cache to the network, i.e. how URLs will be put
+together into cohesive resource groups.  By default, no groups are computed
+(thus making the cache only useful for local access), and a few strategies are
+already provided; however, since this is a very application-dependent issue,
+you may specify ``--group=cmd`` and point the ``OUINET_GROUP_CMD`` environment
+variable to a program that receives a URL as an argument and outputs the
+associated group.
