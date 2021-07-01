@@ -818,7 +818,7 @@ def _group_cmd_on_uri(uri):
     if not _group_cmd:
         raise RuntimeError("environment variable %s is not set" % OUINET_GROUP_CMD_VAR)
     proc = subprocess.run([_group_cmd, uri], stdout=subprocess.PIPE, check=True, text=True)
-    return proc.stdout.strip()
+    return proc.stdout.strip()  # TODO: warn on suspicious results (e.g. with newlines)
 
 def group_add_uri(repo_dir, group, uri):
     """Add the given `uri` (string) to the resource `group` (bytes).
