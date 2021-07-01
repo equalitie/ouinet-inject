@@ -622,6 +622,7 @@ def inject_dir(input_dir, output_dir, overwrite,
 
     # Look for URI files not yet having a descriptor file in the output directory.
     for (dirpath, dirnames, filenames) in os.walk(input_dir):
+        # TODO: ignore certain files (customizable)
         for fn in filenames:
             if not fn.endswith(URI_FILE_EXT):
                 continue  # not a URI file
@@ -888,6 +889,7 @@ def inject_static_root(input_dir, output_dir, overwrite,
             continue
         if OUINET_DIR_NAME in os.path.relpath(dirpath, root_dir).split(os.path.sep):
             continue
+        # TODO: ignore certain files (customizable)
         # E.g. with `http://foo.bar/' and `/path/to/root`,
         # `/path/to/root/blah/blàh` -> `http://foo.bar/blah/bl%C3%A0h/`.
         dir_uri_prefix = '%s%s/' % (base_uri, quote(dirpath[len(root_dir):].replace(os.path.sep, '/')))
