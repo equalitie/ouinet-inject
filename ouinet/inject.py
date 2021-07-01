@@ -436,7 +436,6 @@ def http_inject(inj, httpsig_priv_key, httpsig_key_id=None, _ts=None):
     to_sign.add_header(_hdr_sig0, signature)
     return to_sign.to_ascii_bytes()
 
-# TODO: return sequence of tuples, or an iterator
 def block_signatures(inj, data_path, httpsig_priv_key):
     r"""Iterate over block signatures for the given injection.
 
